@@ -25,7 +25,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 
 | Steg | Modul | Status |
 |------|-------|--------|
-| 1. Miljø + tilfeldige rollouts | `worldmodels/env`, `worldmodels/data` | ✅ ferdig, venter på godkjenning |
+| 1. Miljø + tilfeldige rollouts | `worldmodels/env`, `worldmodels/data` | ✅ ferdig og godkjent |
 | 2. VAE | `worldmodels/vae` | ⏳ ikke påbegynt |
 | 3. MDN-RNN | `worldmodels/mdnrnn` | ⏳ ikke påbegynt |
 | 4. Controller trent i drømmen | `worldmodels/controller` | ⏳ ikke påbegynt |
