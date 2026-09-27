@@ -1,0 +1,132 @@
+import numpy as np
+import pytest
+import torch
+
+from worldmodels.data import RandomPolicy, collect_rollouts, episode_paths, run_episode
+from worldmodels.env import GridDodgeEnv
+from worldmodels.mdnrnn.encode import (
+    EVENT_GOAL,
+    EVENT_MOVE,
+    EVENT_OBSTACLE,
+    ZSequences,
+    encode_episodes,
+    episode_events,
+)
+from worldmodels.mdnrnn.model import MDNRNN, MDNRNNConfig, mdn_nll, most_likely_mean, sample_next
+from worldmodels.mdnrnn.train import batch_loss, make_batch, split_indices
+from worldmodels.vae.model import ConvVAE, VAEConfig
+
+
+@pytest.fixture(scope="module")
+def seqs(tmp_path_factory) -> ZSequences:
+    d = tmp_path_factory.mktemp("rollouts")
+    collect_rollouts(d, num_episodes=6, seed=0)
+    torch.manual_seed(0)
+    return encode_episodes(ConvVAE(VAEConfig(latent_dim=4)), episode_paths(d))
+
+
+def test_episode_events_marks_goal_obstacle_and_ignores_truncation():
+    env = GridDodgeEnv()
+    kinds = set()
+    for seed in range(40):
+        ep = run_episode(env, RandomPolicy(seed=seed), seed=seed)
+        ev = episode_events(ep)
+        assert (ev[:-1] == EVENT_MOVE).all()
+        if ep.truncated[-1]:
+            assert ev[-1] == EVENT_MOVE
+        elif ep.rewards[-1] > 0:
+            assert ev[-1] == EVENT_GOAL
+        else:
+            assert ev[-1] == EVENT_OBSTACLE
+        kinds.add(int(ev[-1]))
+    assert kinds == {EVENT_MOVE, EVENT_GOAL, EVENT_OBSTACLE}
+
+
+def test_encoded_sequences_have_consistent_lengths(seqs):
+    assert len(seqs) == 6
+    assert len(seqs.mu) == len(seqs.agent_cell) == int((seqs.lengths + 1).sum())
+    assert len(seqs.actions) == len(seqs.events) == int(seqs.lengths.sum())
+    ep = seqs.episode(2)
+    assert len(ep["mu"]) == len(ep["actions"]) + 1
+    assert (ep["agent_cell"] >= 0).all()
+
+
+def test_zsequences_save_load_and_subset(seqs, tmp_path):
+    path = tmp_path / "z.npz"
+    seqs.save(path)
+    loaded = ZSequences.load(path)
+    assert np.array_equal(loaded.mu, seqs.mu)
+    sub = seqs.subset([1, 3])
+    assert np.array_equal(sub.episode(1)["actions"], seqs.episode(3)["actions"])
+
+
+def test_make_batch_pads_and_masks(seqs):
+    batch = make_batch(seqs, [0, 1, 2])
+    T = int(seqs.lengths[:3].max())
+    assert batch.z_mu.shape == (3, T + 1, 4)
+    assert batch.mask.sum().item() == int(seqs.lengths[:3].sum())
+    for b in range(3):
+        n = int(seqs.lengths[b])
+        assert batch.mask[b, :n].all() and not batch.mask[b, n:].any()
+    assert torch.equal(batch.inputs(sample=False), batch.z_mu[:, :-1])
+    assert not torch.equal(batch.inputs(sample=True), batch.z_mu[:, :-1])
+
+
+def test_split_indices_is_disjoint_and_complete():
+    tr, va = split_indices(50, val_fraction=0.2)
+    assert len(va) == 10 and len(tr) == 40
+    assert sorted(np.concatenate([tr, va]).tolist()) == list(range(50))
+
+
+def test_model_output_shapes_and_residual_means():
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=16, num_mixtures=3))
+    z = torch.randn(2, 5, 4)
+    a = torch.randint(0, 4, (2, 5))
+    out = model(z, a)
+    assert out.logit_pi.shape == (2, 5, 3)
+    assert out.mu.shape == out.log_sigma.shape == (2, 5, 3, 4)
+    assert out.event_logits.shape == (2, 5, 3)
+    assert out.h.shape == (2, 5, 16)
+    # Med nullstilt mu-hode er alle komponentene lik inndata (residualparametrisering)
+    torch.nn.init.zeros_(model.mu_head.weight)
+    torch.nn.init.zeros_(model.mu_head.bias)
+    assert torch.allclose(model(z, a).mu, z.unsqueeze(2).expand(-1, -1, 3, -1))
+
+
+def test_mdn_nll_matches_single_gaussian():
+    model = MDNRNN(MDNRNNConfig(latent_dim=2, hidden_dim=8, num_mixtures=1))
+    out = model(torch.zeros(1, 1, 2), torch.zeros(1, 1, dtype=torch.long))
+    target = out.mu[:, :, 0] + 0.3
+    expected = -torch.distributions.Normal(out.mu[:, :, 0], out.log_sigma[:, :, 0].exp()).log_prob(target).sum(-1) / 2
+    assert torch.allclose(mdn_nll(out, target), expected, atol=1e-5)
+
+
+def test_sampling_temperature_zero_is_most_likely_mean():
+    model = MDNRNN(MDNRNNConfig(latent_dim=3, hidden_dim=8, num_mixtures=4))
+    out = model(torch.randn(2, 3, 3), torch.randint(0, 4, (2, 3)))
+    assert torch.equal(sample_next(out, temperature=0), most_likely_mean(out))
+    g = torch.Generator().manual_seed(0)
+    s = sample_next(out, temperature=1.0, generator=g)
+    assert s.shape == (2, 3, 3) and torch.isfinite(s).all()
+
+
+def test_training_reduces_loss_on_small_data(seqs):
+    torch.manual_seed(0)
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=32, num_mixtures=2))
+    opt = torch.optim.Adam(model.parameters(), lr=3e-3)
+    batch = make_batch(seqs, range(len(seqs)))
+    first = batch_loss(model, batch, sample_inputs=False, event_weight=1.0)["loss"].item()
+    for _ in range(80):
+        loss = batch_loss(model, batch, sample_inputs=False, event_weight=1.0)["loss"]
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    assert loss.item() < first - 1.0
+
+
+def test_save_and_load_roundtrip(tmp_path):
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2)).eval()
+    model.save(tmp_path / "m.pt")
+    loaded, _ = MDNRNN.load(tmp_path / "m.pt")
+    z, a = torch.randn(1, 3, 4), torch.randint(0, 4, (1, 3))
+    assert torch.allclose(model(z, a).mu, loaded(z, a).mu)
