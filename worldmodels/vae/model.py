@@ -16,7 +16,7 @@ from torch.nn import functional as F
 
 @dataclass(frozen=True)
 class VAEConfig:
-    latent_dim: int = 16
+    latent_dim: int = 32
     image_size: int = 64
     base_channels: int = 32
 

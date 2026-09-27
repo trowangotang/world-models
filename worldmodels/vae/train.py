@@ -45,8 +45,8 @@ def run_epoch(model, frames, opt, batch_size, object_weight, beta, rng=None) -> 
 def train(
     data_dir: str | Path,
     out: str | Path,
-    latent_dim: int = 16,
-    epochs: int = 15,
+    latent_dim: int = 32,
+    epochs: int = 12,
     batch_size: int = 128,
     lr: float = 1e-3,
     object_weight: float = 10.0,
@@ -88,8 +88,8 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Tren VAE på GridDodge-rollouts")
     p.add_argument("--data", default="data/rollouts")
     p.add_argument("--out", default="checkpoints/vae.pt")
-    p.add_argument("--latent-dim", type=int, default=16)
-    p.add_argument("--epochs", type=int, default=15)
+    p.add_argument("--latent-dim", type=int, default=32)
+    p.add_argument("--epochs", type=int, default=12)
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--object-weight", type=float, default=10.0, help="1 = vanlig MSE uten vekting")
