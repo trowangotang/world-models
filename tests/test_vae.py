@@ -94,3 +94,26 @@ def test_iterate_minibatches_covers_all_frames(frames):
     batches = list(iterate_minibatches(frames, batch_size=5, shuffle=True, rng=np.random.default_rng(0)))
     assert [b.shape[0] for b in batches] == [5, 5, 5, 1]
     assert batches[0].dtype == torch.float32 and batches[0].max() <= 1.0
+
+
+def test_grid_metrics_perfect_and_missing_agent(frames):
+    from worldmodels.vae.evaluate import grid_metrics
+
+    perfect = grid_metrics(frames, frames)
+    assert perfect == {"cell_accuracy": 1.0, "layout_exact": 1.0, "agent_cell_accuracy": 1.0, "agent_missing": 0.0}
+    blank = np.broadcast_to(frames[:, :1, :1], frames.shape).copy()  # bare bakgrunn
+    m = grid_metrics(frames, blank)
+    assert m["agent_missing"] == 1.0 and m["agent_cell_accuracy"] == 0.0
+    assert 0.8 < m["cell_accuracy"] < 1.0
+
+
+def test_linear_probe_learns_linearly_separable_labels():
+    from worldmodels.vae.evaluate import linear_probe
+
+    rng = np.random.default_rng(0)
+    y = rng.integers(0, 4, size=400)
+    z = np.eye(4)[y] * 3 + rng.normal(scale=0.3, size=(400, 4))
+    acc = linear_probe(z[:300], y[:300], z[300:], y[300:], num_classes=4, epochs=100)
+    assert acc > 0.95
+    noise_acc = linear_probe(rng.normal(size=(300, 4)), y[:300], rng.normal(size=(100, 4)), y[300:], num_classes=4, epochs=100)
+    assert noise_acc < 0.5
