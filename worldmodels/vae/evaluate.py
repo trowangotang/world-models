@@ -4,9 +4,10 @@ Tre typer mål, alle på valideringsepisodene:
   1. Rekonstruksjon: vanlig MSE per piksel.
   2. Rutenett-nøyaktighet: les rekonstruksjonen som et rutenett (parse_cells) og sjekk
      om hver celle, og spesielt agentens celle, er riktig.
-  3. Lineær probe: tren en logistisk regresjon fra z (mu) til agentens og målets celle.
-     Hvis en *lineær* modell klarer det, er informasjonen lett tilgjengelig for en
-     enkel controller senere. Tilfeldig gjetting gir 1/64 ≈ 1,6 %.
+  3. Prober: tren en liten modell fra z (mu) til agentens og målets celle.
+     En *lineær* probe sier om informasjonen er lett tilgjengelig for en lineær
+     controller. En MLP-probe (ett skjult lag) sier om informasjonen finnes i z i det hele
+     tatt. Tilfeldig gjetting gir 1/64 ≈ 1,6 %.
 
     python -m worldmodels.vae.evaluate checkpoints/vae_z16_w10.pt checkpoints/vae_z16_w1.pt
 """
@@ -51,23 +52,37 @@ def grid_metrics(frames: np.ndarray, recons: np.ndarray) -> dict[str, float]:
     }
 
 
-def linear_probe(
+def train_probe(
     z_train: np.ndarray, y_train: np.ndarray, z_val: np.ndarray, y_val: np.ndarray,
-    num_classes: int = 64, epochs: int = 300, lr: float = 0.05, seed: int = 0,
+    num_classes: int = 64, hidden: int | None = None, epochs: int = 20, lr: float | None = None,
+    batch_size: int = 1024, seed: int = 0,
 ) -> float:
-    """Tren logistisk regresjon z -> klasse og returner nøyaktighet på valideringsdata."""
+    """Tren en probe z -> klasse og returner nøyaktighet på valideringsdata.
+
+    hidden=None gir en lineær probe (logistisk regresjon). Med hidden får proben ett
+    skjult lag, som viser om informasjonen finnes i z selv om den ikke er lineært tilgjengelig.
+    """
     torch.manual_seed(seed)
     mean, std = z_train.mean(0), z_train.std(0) + 1e-6
     zt = torch.from_numpy((z_train - mean) / std).float()
     zv = torch.from_numpy((z_val - mean) / std).float()
     yt = torch.from_numpy(y_train).long()
-    probe = nn.Linear(zt.shape[1], num_classes)
+    d = zt.shape[1]
+    if hidden is None:
+        probe = nn.Linear(d, num_classes)
+        lr = lr or 1e-2
+    else:
+        probe = nn.Sequential(nn.Linear(d, hidden), nn.ReLU(), nn.Linear(hidden, num_classes))
+        lr = lr or 1e-3
     opt = torch.optim.Adam(probe.parameters(), lr=lr)
-    for _ in range(epochs):  # fullbatch: datasettet er lite
-        loss = nn.functional.cross_entropy(probe(zt), yt)
-        opt.zero_grad()
-        loss.backward()
-        opt.step()
+    for _ in range(epochs):
+        perm = torch.randperm(len(zt))
+        for i in range(0, len(zt), batch_size):
+            b = perm[i:i + batch_size]
+            loss = nn.functional.cross_entropy(probe(zt[b]), yt[b])
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
     with torch.no_grad():
         pred = probe(zv).argmax(1).numpy()
     return float((pred == y_val).mean())
@@ -87,7 +102,9 @@ def evaluate_checkpoint(path: str | Path, split) -> dict:
         # Målet er skjult i siste bilde når agenten står på det; de bildene hoppes over.
         y_tr, y_va = find_cell(labels_tr, kind), find_cell(labels_va, kind)
         tr, va = y_tr >= 0, y_va >= 0
-        result[f"probe_{name}_accuracy"] = linear_probe(mu_tr[tr], y_tr[tr], mu_va[va], y_va[va])
+        args = (mu_tr[tr], y_tr[tr], mu_va[va], y_va[va])
+        result[f"probe_{name}_linear"] = train_probe(*args)
+        result[f"probe_{name}_mlp"] = train_probe(*args, hidden=256)
     return result
 
 
@@ -116,7 +133,10 @@ def main(argv: list[str] | None = None) -> None:
     split = load_split(args.data, frames_per_episode=args.frames_per_episode)
     results = [evaluate_checkpoint(c, split) for c in args.checkpoints]
 
-    cols = ["val_mse", "cell_accuracy", "layout_exact", "agent_cell_accuracy", "probe_agent_accuracy", "probe_goal_accuracy"]
+    cols = [
+        "val_mse", "cell_accuracy", "layout_exact", "agent_cell_accuracy",
+        "probe_agent_linear", "probe_agent_mlp", "probe_goal_linear", "probe_goal_mlp",
+    ]
     print("checkpoint".ljust(28) + "".join(c[:14].rjust(15) for c in cols))
     for r in results:
         print(Path(r["checkpoint"]).name.ljust(28) + "".join(f"{r[c]:15.4f}" for c in cols))

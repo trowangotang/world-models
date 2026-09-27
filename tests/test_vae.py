@@ -107,15 +107,15 @@ def test_grid_metrics_perfect_and_missing_agent(frames):
     assert 0.8 < m["cell_accuracy"] < 1.0
 
 
-def test_linear_probe_learns_linearly_separable_labels():
-    from worldmodels.vae.evaluate import linear_probe
+def test_probe_learns_linearly_separable_labels():
+    from worldmodels.vae.evaluate import train_probe
 
     rng = np.random.default_rng(0)
     y = rng.integers(0, 4, size=400)
     z = np.eye(4)[y] * 3 + rng.normal(scale=0.3, size=(400, 4))
-    acc = linear_probe(z[:300], y[:300], z[300:], y[300:], num_classes=4, epochs=100)
+    acc = train_probe(z[:300], y[:300], z[300:], y[300:], num_classes=4, epochs=100)
     assert acc > 0.95
-    noise_acc = linear_probe(rng.normal(size=(300, 4)), y[:300], rng.normal(size=(100, 4)), y[300:], num_classes=4, epochs=100)
+    noise_acc = train_probe(rng.normal(size=(300, 4)), y[:300], rng.normal(size=(100, 4)), y[300:], num_classes=4, epochs=100)
     assert noise_acc < 0.5
 
 
@@ -127,3 +127,14 @@ def test_frames_per_episode_caps_frames(tmp_path):
     full = load_frames(paths)
     capped = load_frames(paths, frames_per_episode=2)
     assert len(capped) == 2 * 10 < len(full)
+
+
+def test_mlp_probe_learns_xor_that_linear_probe_cannot():
+    from worldmodels.vae.evaluate import train_probe
+
+    rng = np.random.default_rng(0)
+    z = rng.choice([-1.0, 1.0], size=(2000, 2)) + rng.normal(scale=0.1, size=(2000, 2))
+    y = ((z[:, 0] > 0) ^ (z[:, 1] > 0)).astype(int)
+    args = (z[:1500], y[:1500], z[1500:], y[1500:])
+    assert train_probe(*args, num_classes=2, epochs=30) <= 0.8  # beste lineære skille tar 3 av 4 klynger
+    assert train_probe(*args, num_classes=2, hidden=16, epochs=30, lr=1e-2) > 0.95
