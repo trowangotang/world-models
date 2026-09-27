@@ -18,6 +18,10 @@ from worldmodels.vae.loss import vae_loss
 from worldmodels.vae.model import ConvVAE, VAEConfig
 
 
+def _log(msg: str) -> None:
+    print(msg, flush=True)  # flush slik at fremdrift vises også når utdata går til fil
+
+
 def run_epoch(model, frames, opt, batch_size, object_weight, beta, rng=None) -> dict[str, float]:
     """Én gjennomgang av frames. Trener hvis opt er gitt, ellers bare evaluerer."""
     training = opt is not None
@@ -48,7 +52,7 @@ def train(
     object_weight: float = 10.0,
     beta: float = 1.0,
     seed: int = 0,
-    log=print,
+    log=_log,
 ) -> dict:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
