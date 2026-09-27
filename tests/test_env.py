@@ -113,3 +113,37 @@ def test_save_png_writes_valid_png_header(tmp_path):
     assert data[12:16] == b"IHDR"
     assert int.from_bytes(data[16:20], "big") == 5   # bredde
     assert int.from_bytes(data[20:24], "big") == 4   # høyde
+
+
+def test_parse_cells_recovers_layout_from_render():
+    from worldmodels.env.parse import AGENT, EMPTY, GOAL, OBSTACLE, find_cell, parse_cells
+
+    env = make_env()
+    for seed in range(20):
+        obs = env.reset(seed=seed)
+        cells = parse_cells(obs)
+        g = env.config.grid_size
+        for r in range(g):
+            for c in range(g):
+                p = (r, c)
+                expected = (
+                    AGENT if p == env.agent_pos
+                    else GOAL if p == env.goal_pos
+                    else OBSTACLE if p in env.obstacles
+                    else EMPTY
+                )
+                assert cells[r, c] == expected
+        assert find_cell(cells, AGENT) == env.agent_pos[0] * g + env.agent_pos[1]
+
+
+def test_parse_cells_accepts_float_batches_and_reports_missing():
+    from worldmodels.env.parse import AGENT, find_cell, parse_cells
+
+    env = make_env()
+    obs = env.reset(seed=0)
+    batch = np.stack([obs, np.zeros_like(obs)]).astype(np.float32) / 255.0
+    cells = parse_cells(batch)
+    assert cells.shape == (2, 8, 8)
+    idx = find_cell(cells, AGENT)
+    assert idx[0] == env.agent_pos[0] * 8 + env.agent_pos[1]
+    assert idx[1] == -1
