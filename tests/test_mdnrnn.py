@@ -164,3 +164,20 @@ def test_linear_input_variant_has_no_input_mlp():
     mlp = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, input_mlp=True))
     assert isinstance(linear.input_net, torch.nn.Identity)
     assert linear.lstm.input_size == 4 + 4 and mlp.lstm.input_size == 8
+
+
+def test_direct_path_lets_first_step_depend_on_input():
+    """Med direkte vei påvirker inndata prediksjonen også gjennom trunk, ikke bare via LSTM-en."""
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, direct_path=True))
+    assert model.trunk is not None
+    assert MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, direct_path=False)).trunk is None
+    out = model(torch.randn(2, 3, 4), torch.randint(0, 4, (2, 3)))
+    assert out.mu.shape == (2, 3, 5, 4)
+
+
+def test_old_checkpoint_config_loads_without_new_layers(tmp_path):
+    old = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, input_mlp=False, direct_path=False))
+    torch.save({"config": {"latent_dim": 4, "num_actions": 4, "hidden_dim": 8, "num_mixtures": 5},
+                "state_dict": old.state_dict()}, tmp_path / "old.pt")
+    loaded, _ = MDNRNN.load(tmp_path / "old.pt")
+    assert loaded.trunk is None and isinstance(loaded.input_net, torch.nn.Identity)

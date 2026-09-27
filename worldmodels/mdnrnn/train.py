@@ -142,7 +142,8 @@ def train(
     event_weight: float = 1.0,
     balance_events: bool = True,
     input_mlp: bool = True,
-    mse_weight: float = 0.0,
+    direct_path: bool = True,
+    mse_weight: float = 10.0,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
 ) -> dict:
@@ -154,6 +155,7 @@ def train(
 
     model = MDNRNN(MDNRNNConfig(
         latent_dim=seqs.mu.shape[1], hidden_dim=hidden_dim, num_mixtures=num_mixtures, input_mlp=input_mlp,
+        direct_path=direct_path,
     ))
     class_weights = event_class_weights(seqs.subset(train_idx).events) if balance_events else None
     if class_weights is not None:
@@ -166,8 +168,11 @@ def train(
         tr = run_epoch(model, seqs, train_idx, opt, batch_size, event_weight, rng, class_weights, mse_weight)
         va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight, None, class_weights, mse_weight)
         history.append({"epoch": epoch, "train": tr, "val": va})
-        if va["loss"] < best_val:  # behold modellen med lavest valideringstap (tidlig stopp)
-            best_val, best_epoch = va["loss"], epoch
+        # Tidlig stopp på dynamikken alene. Hendelseshodet overtilpasser seg tidligere enn resten,
+        # og ville ellers stoppet treningen før z-prediksjonen er ferdig lært.
+        val_dynamics = va["nll"] + mse_weight * va["mse"]
+        if val_dynamics < best_val:
+            best_val, best_epoch = val_dynamics, epoch
             best_state = copy.deepcopy(model.state_dict())
         log(
             f"epoke {epoch:2d}  tren nll {tr['nll']:7.3f} hendelse {tr['event_ce']:.3f}  "
@@ -178,7 +183,7 @@ def train(
     hparams = {
         "hidden_dim": hidden_dim, "num_mixtures": num_mixtures, "epochs": epochs, "batch_size": batch_size,
         "lr": lr, "event_weight": event_weight, "balance_events": balance_events, "input_mlp": input_mlp,
-        "mse_weight": mse_weight, "best_epoch": best_epoch,
+        "direct_path": direct_path, "mse_weight": mse_weight, "best_epoch": best_epoch,
         "seed": seed, "data": str(data),
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
@@ -200,14 +205,15 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--event-weight", type=float, default=1.0)
     p.add_argument("--no-balance-events", action="store_true", help="ikke vekt sjeldne hendelser opp")
     p.add_argument("--linear-input", action="store_true", help="z og handling rett inn i LSTM-en, som i artikkelen")
-    p.add_argument("--mse-weight", type=float, default=0.0, help="vekt på kvadratfeil for forventet z")
+    p.add_argument("--mse-weight", type=float, default=10.0, help="vekt på kvadratfeil for forventet z")
+    p.add_argument("--no-direct-path", action="store_true", help="hodene ser bare h, som i artikkelen")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args(argv)
     result = train(
         args.data, args.out, hidden_dim=args.hidden_dim, num_mixtures=args.mixtures, epochs=args.epochs,
         batch_size=args.batch_size, lr=args.lr, event_weight=args.event_weight,
         balance_events=not args.no_balance_events, input_mlp=not args.linear_input,
-        mse_weight=args.mse_weight, seed=args.seed,
+        direct_path=not args.no_direct_path, mse_weight=args.mse_weight, seed=args.seed,
     )
     print(json.dumps(result["history"][-1]))
 

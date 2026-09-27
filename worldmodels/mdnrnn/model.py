@@ -33,6 +33,7 @@ class MDNRNNConfig:
     hidden_dim: int = 256
     num_mixtures: int = 5
     input_mlp: bool = True
+    direct_path: bool = True
 
 
 @dataclass
@@ -58,10 +59,20 @@ class MDNRNN(nn.Module):
             else nn.Identity()
         )
         self.lstm = nn.LSTM(c.hidden_dim if c.input_mlp else in_dim, c.hidden_dim, batch_first=True)
-        self.pi_head = nn.Linear(c.hidden_dim, c.num_mixtures)
-        self.mu_head = nn.Linear(c.hidden_dim, c.num_mixtures * c.latent_dim)
-        self.sigma_head = nn.Linear(c.hidden_dim, c.num_mixtures * c.latent_dim)
-        self.event_head = nn.Linear(c.hidden_dim, NUM_EVENTS)
+        # Direkte vei: hodene ser både minnet h og inndata for dette skrittet, gjennom et skjult
+        # lag. Første skritt i en episode har ingen historikk, og da må prediksjonen komme fra
+        # z_t alene. Uten denne veien lærte LSTM-en å lene seg på historikken og bare kopierte
+        # z i første skritt.
+        head_in = c.hidden_dim
+        if c.direct_path:
+            x_dim = c.hidden_dim if c.input_mlp else c.latent_dim + c.num_actions
+            self.trunk = nn.Sequential(nn.Linear(c.hidden_dim + x_dim, c.hidden_dim), nn.ReLU())
+        else:
+            self.trunk = None
+        self.pi_head = nn.Linear(head_in, c.num_mixtures)
+        self.mu_head = nn.Linear(head_in, c.num_mixtures * c.latent_dim)
+        self.sigma_head = nn.Linear(head_in, c.num_mixtures * c.latent_dim)
+        self.event_head = nn.Linear(head_in, NUM_EVENTS)
 
     def forward(
         self, z: torch.Tensor, actions: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor] | None = None
@@ -69,15 +80,17 @@ class MDNRNN(nn.Module):
         """z: (B, T, D) float, actions: (B, T) long."""
         c = self.config
         a = F.one_hot(actions, c.num_actions).float()
-        h, hidden = self.lstm(self.input_net(torch.cat([z, a], dim=-1)), hidden)
+        x = self.input_net(torch.cat([z, a], dim=-1))
+        h, hidden = self.lstm(x, hidden)
+        feat = self.trunk(torch.cat([h, x], dim=-1)) if self.trunk is not None else h
         B, T, _ = h.shape
-        delta = self.mu_head(h).view(B, T, c.num_mixtures, c.latent_dim)
-        log_sigma = self.sigma_head(h).view(B, T, c.num_mixtures, c.latent_dim)
+        delta = self.mu_head(feat).view(B, T, c.num_mixtures, c.latent_dim)
+        log_sigma = self.sigma_head(feat).view(B, T, c.num_mixtures, c.latent_dim)
         return MDNOutput(
-            logit_pi=self.pi_head(h),
+            logit_pi=self.pi_head(feat),
             mu=z.unsqueeze(2) + delta,
             log_sigma=log_sigma.clamp(LOG_SIGMA_MIN, LOG_SIGMA_MAX),
-            event_logits=self.event_head(h),
+            event_logits=self.event_head(feat),
             hidden=hidden,
             h=h,
         )
@@ -89,7 +102,8 @@ class MDNRNN(nn.Module):
     @classmethod
     def load(cls, path, map_location="cpu") -> tuple["MDNRNN", dict]:
         ckpt = torch.load(path, map_location=map_location, weights_only=False)
-        config = {"input_mlp": False, **ckpt["config"]}  # eldre checkpointer hadde ikke input-MLP
+        # Eldre checkpointer ble lagret før input-MLP og direkte vei fantes
+        config = {"input_mlp": False, "direct_path": False, **ckpt["config"]}
         model = cls(MDNRNNConfig(**config))
         model.load_state_dict(ckpt["state_dict"])
         model.eval()
