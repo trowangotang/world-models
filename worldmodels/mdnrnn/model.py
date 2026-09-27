@@ -32,6 +32,7 @@ class MDNRNNConfig:
     num_actions: int = NUM_ACTIONS
     hidden_dim: int = 256
     num_mixtures: int = 5
+    input_mlp: bool = True
 
 
 @dataclass
@@ -48,7 +49,15 @@ class MDNRNN(nn.Module):
     def __init__(self, config: MDNRNNConfig | None = None):
         super().__init__()
         self.config = c = config or MDNRNNConfig()
-        self.lstm = nn.LSTM(c.latent_dim + c.num_actions, c.hidden_dim, batch_first=True)
+        in_dim = c.latent_dim + c.num_actions
+        # Posisjonen er ikke lineært tilgjengelig i z (decisions.md D14). Et lite MLP før LSTM-en
+        # lar modellen rette ut z allerede i første skritt, i stedet for over flere skritt.
+        self.input_net = (
+            nn.Sequential(nn.Linear(in_dim, c.hidden_dim), nn.ReLU(), nn.Linear(c.hidden_dim, c.hidden_dim), nn.ReLU())
+            if c.input_mlp
+            else nn.Identity()
+        )
+        self.lstm = nn.LSTM(c.hidden_dim if c.input_mlp else in_dim, c.hidden_dim, batch_first=True)
         self.pi_head = nn.Linear(c.hidden_dim, c.num_mixtures)
         self.mu_head = nn.Linear(c.hidden_dim, c.num_mixtures * c.latent_dim)
         self.sigma_head = nn.Linear(c.hidden_dim, c.num_mixtures * c.latent_dim)
@@ -60,7 +69,7 @@ class MDNRNN(nn.Module):
         """z: (B, T, D) float, actions: (B, T) long."""
         c = self.config
         a = F.one_hot(actions, c.num_actions).float()
-        h, hidden = self.lstm(torch.cat([z, a], dim=-1), hidden)
+        h, hidden = self.lstm(self.input_net(torch.cat([z, a], dim=-1)), hidden)
         B, T, _ = h.shape
         delta = self.mu_head(h).view(B, T, c.num_mixtures, c.latent_dim)
         log_sigma = self.sigma_head(h).view(B, T, c.num_mixtures, c.latent_dim)
@@ -80,7 +89,8 @@ class MDNRNN(nn.Module):
     @classmethod
     def load(cls, path, map_location="cpu") -> tuple["MDNRNN", dict]:
         ckpt = torch.load(path, map_location=map_location, weights_only=False)
-        model = cls(MDNRNNConfig(**ckpt["config"]))
+        config = {"input_mlp": False, **ckpt["config"]}  # eldre checkpointer hadde ikke input-MLP
+        model = cls(MDNRNNConfig(**config))
         model.load_state_dict(ckpt["state_dict"])
         model.eval()
         return model, ckpt

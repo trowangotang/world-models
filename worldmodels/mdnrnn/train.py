@@ -19,7 +19,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from worldmodels.mdnrnn.encode import ZSequences
+from worldmodels.mdnrnn.encode import NUM_EVENTS, ZSequences
 from worldmodels.mdnrnn.model import MDNRNN, MDNRNNConfig, mdn_nll
 
 
@@ -73,15 +73,28 @@ def split_indices(n: int, val_fraction: float = 0.1, seed: int = 0) -> tuple[np.
     return np.sort(order[n_val:]), np.sort(order[:n_val])
 
 
-def batch_loss(model: MDNRNN, batch: Batch, sample_inputs: bool, event_weight: float) -> dict[str, torch.Tensor]:
+def event_class_weights(events: np.ndarray, power: float = 0.5) -> torch.Tensor:
+    """Vekt per hendelsestype, proporsjonal med frekvens^-power og normert slik at "flytt" = 1.
+
+    Mål skjer i under 1 % av skrittene og hindringer i ~5 %. Uten vekting lærer modellen
+    å alltid si "flytt". Kvadratroten demper vektene så de sjeldne klassene ikke tar over.
+    """
+    counts = np.bincount(events, minlength=NUM_EVENTS).astype(np.float64)
+    w = np.where(counts > 0, np.maximum(counts, 1) ** -power, 0.0)
+    return torch.tensor(w / w[0], dtype=torch.float32)
+
+
+def batch_loss(
+    model: MDNRNN, batch: Batch, sample_inputs: bool, event_weight: float, class_weights: torch.Tensor | None = None
+) -> dict[str, torch.Tensor]:
     out = model(batch.inputs(sample_inputs), batch.actions)
     m = batch.mask
     nll = mdn_nll(out, batch.targets)[m].mean()
-    ce = F.cross_entropy(out.event_logits[m], batch.events[m])
+    ce = F.cross_entropy(out.event_logits[m], batch.events[m], weight=class_weights)
     return {"loss": nll + event_weight * ce, "nll": nll, "event_ce": ce}
 
 
-def run_epoch(model, seqs, indices, opt, batch_size, event_weight, rng=None) -> dict[str, float]:
+def run_epoch(model, seqs, indices, opt, batch_size, event_weight, rng=None, class_weights=None) -> dict[str, float]:
     training = opt is not None
     model.train(training)
     order = rng.permutation(indices) if training else indices
@@ -89,7 +102,7 @@ def run_epoch(model, seqs, indices, opt, batch_size, event_weight, rng=None) -> 
     with torch.set_grad_enabled(training):
         for start in range(0, len(order), batch_size):
             batch = make_batch(seqs, order[start:start + batch_size])
-            parts = batch_loss(model, batch, sample_inputs=training, event_weight=event_weight)
+            parts = batch_loss(model, batch, training, event_weight, class_weights)
             if training:
                 opt.zero_grad()
                 parts["loss"].backward()
@@ -107,10 +120,12 @@ def train(
     out: str | Path,
     hidden_dim: int = 256,
     num_mixtures: int = 5,
-    epochs: int = 20,
+    epochs: int = 40,
     batch_size: int = 64,
     lr: float = 1e-3,
     event_weight: float = 1.0,
+    balance_events: bool = True,
+    input_mlp: bool = True,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
 ) -> dict:
@@ -120,13 +135,18 @@ def train(
     train_idx, val_idx = split_indices(len(seqs), seed=seed)
     log(f"Trening: {len(train_idx)} episoder, validering: {len(val_idx)} episoder")
 
-    model = MDNRNN(MDNRNNConfig(latent_dim=seqs.mu.shape[1], hidden_dim=hidden_dim, num_mixtures=num_mixtures))
+    model = MDNRNN(MDNRNNConfig(
+        latent_dim=seqs.mu.shape[1], hidden_dim=hidden_dim, num_mixtures=num_mixtures, input_mlp=input_mlp,
+    ))
+    class_weights = event_class_weights(seqs.subset(train_idx).events) if balance_events else None
+    if class_weights is not None:
+        log(f"Hendelsesvekter (flytt, mål, hindring): {[round(w, 2) for w in class_weights.tolist()]}")
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     history = []
     for epoch in range(1, epochs + 1):
         t0 = time.time()
-        tr = run_epoch(model, seqs, train_idx, opt, batch_size, event_weight, rng)
-        va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight)
+        tr = run_epoch(model, seqs, train_idx, opt, batch_size, event_weight, rng, class_weights)
+        va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight, class_weights=class_weights)
         history.append({"epoch": epoch, "train": tr, "val": va})
         log(
             f"epoke {epoch:2d}  tren nll {tr['nll']:7.3f} hendelse {tr['event_ce']:.3f}  "
@@ -135,7 +155,8 @@ def train(
 
     hparams = {
         "hidden_dim": hidden_dim, "num_mixtures": num_mixtures, "epochs": epochs, "batch_size": batch_size,
-        "lr": lr, "event_weight": event_weight, "seed": seed, "data": str(data),
+        "lr": lr, "event_weight": event_weight, "balance_events": balance_events, "input_mlp": input_mlp,
+        "seed": seed, "data": str(data),
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     model.save(out, hparams=hparams, history=history)
@@ -149,15 +170,18 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--out", default="checkpoints/mdnrnn.pt")
     p.add_argument("--hidden-dim", type=int, default=256)
     p.add_argument("--mixtures", type=int, default=5)
-    p.add_argument("--epochs", type=int, default=20)
+    p.add_argument("--epochs", type=int, default=40)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=1e-3)
     p.add_argument("--event-weight", type=float, default=1.0)
+    p.add_argument("--no-balance-events", action="store_true", help="ikke vekt sjeldne hendelser opp")
+    p.add_argument("--linear-input", action="store_true", help="z og handling rett inn i LSTM-en, som i artikkelen")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args(argv)
     result = train(
         args.data, args.out, hidden_dim=args.hidden_dim, num_mixtures=args.mixtures, epochs=args.epochs,
-        batch_size=args.batch_size, lr=args.lr, event_weight=args.event_weight, seed=args.seed,
+        batch_size=args.batch_size, lr=args.lr, event_weight=args.event_weight,
+        balance_events=not args.no_balance_events, input_mlp=not args.linear_input, seed=args.seed,
     )
     print(json.dumps(result["history"][-1]))
 

@@ -147,3 +147,20 @@ def test_evaluation_runs_end_to_end(seqs):
     assert dream["dream_episodes_alive"][0] == len(seqs)
     probes = probe_metrics(model, seqs, idx[:4], idx[4:])
     assert set(probes) == {"probe_agent_linear_z", "probe_agent_linear_h", "probe_agent_linear_z_and_h"}
+
+
+def test_event_class_weights_upweight_rare_events():
+    from worldmodels.mdnrnn.train import event_class_weights
+
+    events = np.array([0] * 100 + [1] * 1 + [2] * 4)
+    w = event_class_weights(events)
+    assert w[0] == pytest.approx(1.0)
+    assert w[1] == pytest.approx(10.0)
+    assert w[2] == pytest.approx(5.0)
+
+
+def test_linear_input_variant_has_no_input_mlp():
+    linear = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, input_mlp=False))
+    mlp = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, input_mlp=True))
+    assert isinstance(linear.input_net, torch.nn.Identity)
+    assert linear.lstm.input_size == 4 + 4 and mlp.lstm.input_size == 8
