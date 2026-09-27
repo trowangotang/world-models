@@ -136,7 +136,7 @@ class GridDodgeEnv:
         self._fill_cell(img, self.goal_pos, COLOR_GOAL)
         # Agenten tegnes litt mindre enn en hel celle, slik at den er synlig
         # også når den står oppå målet eller en hindring i siste bilde.
-        self._fill_cell(img, self.agent_pos, COLOR_AGENT, margin=max(1, c.cell_px // 4))
+        self._fill_cell(img, self.agent_pos, COLOR_AGENT, margin=max(1, c.cell_px // 8))
         return img
 
     def render_ascii(self) -> str:
