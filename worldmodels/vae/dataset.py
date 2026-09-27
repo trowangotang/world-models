@@ -23,9 +23,21 @@ class FrameSplit:
     val: np.ndarray
 
 
-def load_frames(paths: list[Path]) -> np.ndarray:
-    """Alle observasjoner (inkludert siste i hver episode) stablet, uint8."""
-    return np.concatenate([load_episode(p).obs for p in paths], axis=0)
+def load_frames(paths: list[Path], frames_per_episode: int | None = None, seed: int = 0) -> np.ndarray:
+    """Observasjoner fra episodene stablet, uint8.
+
+    Med frames_per_episode trekkes høyst så mange bilder tilfeldig fra hver episode.
+    Bilder i samme episode deler layout, så mange episoder med få bilder hver gir
+    mer variasjon per treningssekund enn få episoder med alle bildene.
+    """
+    rng = np.random.default_rng(seed)
+    chunks = []
+    for p in paths:
+        obs = load_episode(p).obs
+        if frames_per_episode is not None and len(obs) > frames_per_episode:
+            obs = obs[np.sort(rng.choice(len(obs), size=frames_per_episode, replace=False))]
+        chunks.append(obs)
+    return np.concatenate(chunks, axis=0)
 
 
 def split_episodes(paths: list[Path], val_fraction: float = 0.1, seed: int = 0) -> tuple[list[Path], list[Path]]:
@@ -39,9 +51,14 @@ def split_episodes(paths: list[Path], val_fraction: float = 0.1, seed: int = 0) 
     return train, val
 
 
-def load_split(data_dir: str | Path, val_fraction: float = 0.1, seed: int = 0) -> FrameSplit:
+def load_split(
+    data_dir: str | Path, val_fraction: float = 0.1, seed: int = 0, frames_per_episode: int | None = None
+) -> FrameSplit:
     train_paths, val_paths = split_episodes(episode_paths(data_dir), val_fraction, seed)
-    return FrameSplit(train=load_frames(train_paths), val=load_frames(val_paths))
+    return FrameSplit(
+        train=load_frames(train_paths, frames_per_episode, seed),
+        val=load_frames(val_paths, frames_per_episode, seed + 1),
+    )
 
 
 def to_tensor(frames: np.ndarray) -> torch.Tensor:

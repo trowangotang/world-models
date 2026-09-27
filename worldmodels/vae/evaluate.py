@@ -84,9 +84,10 @@ def evaluate_checkpoint(path: str | Path, split) -> dict:
     result["val_mse"] = float((diff ** 2).mean())
     result.update(grid_metrics(split.val, rec_va))
     for name, kind in (("agent", AGENT), ("goal", GOAL)):
-        result[f"probe_{name}_accuracy"] = linear_probe(
-            mu_tr, find_cell(labels_tr, kind), mu_va, find_cell(labels_va, kind)
-        )
+        # Målet er skjult i siste bilde når agenten står på det; de bildene hoppes over.
+        y_tr, y_va = find_cell(labels_tr, kind), find_cell(labels_va, kind)
+        tr, va = y_tr >= 0, y_va >= 0
+        result[f"probe_{name}_accuracy"] = linear_probe(mu_tr[tr], y_tr[tr], mu_va[va], y_va[va])
     return result
 
 
@@ -109,9 +110,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--data", default="data/rollouts")
     p.add_argument("--image", default=None, help="lagre sammenligning av rekonstruksjoner som PNG")
     p.add_argument("--json", default=None, help="lagre målene som JSON")
+    p.add_argument("--frames-per-episode", type=int, default=None)
     args = p.parse_args(argv)
 
-    split = load_split(args.data)
+    split = load_split(args.data, frames_per_episode=args.frames_per_episode)
     results = [evaluate_checkpoint(c, split) for c in args.checkpoints]
 
     cols = ["val_mse", "cell_accuracy", "layout_exact", "agent_cell_accuracy", "probe_agent_accuracy", "probe_goal_accuracy"]

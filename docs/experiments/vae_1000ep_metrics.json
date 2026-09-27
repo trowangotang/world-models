@@ -1,0 +1,62 @@
+[
+  {
+    "checkpoint": "checkpoints/vae_1000ep_z16_w10.pt",
+    "hparams": {
+      "latent_dim": 16,
+      "epochs": 20,
+      "batch_size": 128,
+      "lr": 0.001,
+      "object_weight": 10.0,
+      "beta": 1.0,
+      "seed": 0,
+      "data_dir": "data/rollouts"
+    },
+    "val_mse": 0.02271150052547455,
+    "cell_accuracy": 0.8514637212643679,
+    "layout_exact": 0.0,
+    "agent_cell_accuracy": 0.0839080459770115,
+    "agent_missing": 0.17586206896551723,
+    "probe_agent_accuracy": 0.06379310344827586,
+    "probe_goal_accuracy": 0.06601042269832079
+  },
+  {
+    "checkpoint": "checkpoints/vae_1000ep_z16_w1.pt",
+    "hparams": {
+      "latent_dim": 16,
+      "epochs": 20,
+      "batch_size": 128,
+      "lr": 0.001,
+      "object_weight": 1.0,
+      "beta": 1.0,
+      "seed": 0,
+      "data_dir": "data/rollouts"
+    },
+    "val_mse": 0.01747911609709263,
+    "cell_accuracy": 0.8959231321839081,
+    "layout_exact": 0.0,
+    "agent_cell_accuracy": 0.0,
+    "agent_missing": 1.0,
+    "probe_agent_accuracy": 0.04367816091954023,
+    "probe_goal_accuracy": 0.0677475390851187
+  },
+  {
+    "checkpoint": "checkpoints/vae_1000ep_z32_w10.pt",
+    "hparams": {
+      "latent_dim": 32,
+      "epochs": 20,
+      "batch_size": 128,
+      "lr": 0.001,
+      "object_weight": 10.0,
+      "beta": 1.0,
+      "seed": 0,
+      "data_dir": "data/rollouts"
+    },
+    "val_mse": 0.006403189152479172,
+    "cell_accuracy": 0.9534123563218391,
+    "layout_exact": 0.0034482758620689655,
+    "agent_cell_accuracy": 0.3281609195402299,
+    "agent_missing": 0.04252873563218391,
+    "probe_agent_accuracy": 0.09425287356321839,
+    "probe_goal_accuracy": 0.07122177185871453
+  }
+]

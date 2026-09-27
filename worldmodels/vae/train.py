@@ -52,11 +52,12 @@ def train(
     object_weight: float = 10.0,
     beta: float = 1.0,
     seed: int = 0,
+    frames_per_episode: int | None = None,
     log=_log,
 ) -> dict:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
-    split = load_split(data_dir, seed=seed)
+    split = load_split(data_dir, seed=seed, frames_per_episode=frames_per_episode)
     log(f"Trening: {len(split.train)} bilder, validering: {len(split.val)} bilder")
 
     model = ConvVAE(VAEConfig(latent_dim=latent_dim))
@@ -75,6 +76,7 @@ def train(
     hparams = {
         "latent_dim": latent_dim, "epochs": epochs, "batch_size": batch_size, "lr": lr,
         "object_weight": object_weight, "beta": beta, "seed": seed, "data_dir": str(data_dir),
+        "frames_per_episode": frames_per_episode,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     model.save(out, hparams=hparams, history=history)
@@ -93,10 +95,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--object-weight", type=float, default=10.0, help="1 = vanlig MSE uten vekting")
     p.add_argument("--beta", type=float, default=1.0, help="vekt på KL-leddet")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--frames-per-episode", type=int, default=None, help="maks antall bilder per episode")
     args = p.parse_args(argv)
     result = train(
         args.data, args.out, latent_dim=args.latent_dim, epochs=args.epochs, batch_size=args.batch_size,
         lr=args.lr, object_weight=args.object_weight, beta=args.beta, seed=args.seed,
+        frames_per_episode=args.frames_per_episode,
     )
     print(json.dumps(result["history"][-1]))
 

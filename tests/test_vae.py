@@ -117,3 +117,13 @@ def test_linear_probe_learns_linearly_separable_labels():
     assert acc > 0.95
     noise_acc = linear_probe(rng.normal(size=(300, 4)), y[:300], rng.normal(size=(100, 4)), y[300:], num_classes=4, epochs=100)
     assert noise_acc < 0.5
+
+
+def test_frames_per_episode_caps_frames(tmp_path):
+    from worldmodels.vae.dataset import load_frames
+
+    collect_rollouts(tmp_path, num_episodes=10, seed=0)
+    paths = episode_paths(tmp_path)
+    full = load_frames(paths)
+    capped = load_frames(paths, frames_per_episode=2)
+    assert len(capped) == 2 * 10 < len(full)
