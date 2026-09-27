@@ -10,6 +10,7 @@ mater sine egne prediksjoner tilbake. Målet er middelverdien mu_{t+1}.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import time
 from dataclasses import dataclass
@@ -85,24 +86,39 @@ def event_class_weights(events: np.ndarray, power: float = 0.5) -> torch.Tensor:
 
 
 def batch_loss(
-    model: MDNRNN, batch: Batch, sample_inputs: bool, event_weight: float, class_weights: torch.Tensor | None = None
+    model: MDNRNN,
+    batch: Batch,
+    sample_inputs: bool,
+    event_weight: float,
+    class_weights: torch.Tensor | None = None,
+    mse_weight: float = 0.0,
 ) -> dict[str, torch.Tensor]:
+    """nll + event_weight * hendelsestap + mse_weight * kvadratfeil for forventet z_{t+1}.
+
+    MSE-leddet tvinger blandingens forventning til å treffe neste z. Uten det kan modellen
+    få lav nll ved å treffe de mange dimensjonene som ikke endrer seg, og være slapp på
+    de få som koder hvor agenten flyttet seg (se decisions.md).
+    """
     out = model(batch.inputs(sample_inputs), batch.actions)
     m = batch.mask
     nll = mdn_nll(out, batch.targets)[m].mean()
     ce = F.cross_entropy(out.event_logits[m], batch.events[m], weight=class_weights)
-    return {"loss": nll + event_weight * ce, "nll": nll, "event_ce": ce}
+    expected = (F.softmax(out.logit_pi, dim=-1).unsqueeze(-1) * out.mu).sum(2)
+    mse = ((expected - batch.targets) ** 2)[m].mean()
+    return {"loss": nll + event_weight * ce + mse_weight * mse, "nll": nll, "event_ce": ce, "mse": mse}
 
 
-def run_epoch(model, seqs, indices, opt, batch_size, event_weight, rng=None, class_weights=None) -> dict[str, float]:
+def run_epoch(
+    model, seqs, indices, opt, batch_size, event_weight, rng=None, class_weights=None, mse_weight=0.0
+) -> dict[str, float]:
     training = opt is not None
     model.train(training)
     order = rng.permutation(indices) if training else indices
-    totals, n = {"loss": 0.0, "nll": 0.0, "event_ce": 0.0}, 0
+    totals, n = {"loss": 0.0, "nll": 0.0, "event_ce": 0.0, "mse": 0.0}, 0
     with torch.set_grad_enabled(training):
         for start in range(0, len(order), batch_size):
             batch = make_batch(seqs, order[start:start + batch_size])
-            parts = batch_loss(model, batch, training, event_weight, class_weights)
+            parts = batch_loss(model, batch, training, event_weight, class_weights, mse_weight)
             if training:
                 opt.zero_grad()
                 parts["loss"].backward()
@@ -126,6 +142,7 @@ def train(
     event_weight: float = 1.0,
     balance_events: bool = True,
     input_mlp: bool = True,
+    mse_weight: float = 0.0,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
 ) -> dict:
@@ -143,24 +160,31 @@ def train(
         log(f"Hendelsesvekter (flytt, mål, hindring): {[round(w, 2) for w in class_weights.tolist()]}")
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     history = []
+    best_val, best_epoch, best_state = float("inf"), 0, None
     for epoch in range(1, epochs + 1):
         t0 = time.time()
-        tr = run_epoch(model, seqs, train_idx, opt, batch_size, event_weight, rng, class_weights)
-        va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight, class_weights=class_weights)
+        tr = run_epoch(model, seqs, train_idx, opt, batch_size, event_weight, rng, class_weights, mse_weight)
+        va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight, None, class_weights, mse_weight)
         history.append({"epoch": epoch, "train": tr, "val": va})
+        if va["loss"] < best_val:  # behold modellen med lavest valideringstap (tidlig stopp)
+            best_val, best_epoch = va["loss"], epoch
+            best_state = copy.deepcopy(model.state_dict())
         log(
             f"epoke {epoch:2d}  tren nll {tr['nll']:7.3f} hendelse {tr['event_ce']:.3f}  "
-            f"val nll {va['nll']:7.3f} hendelse {va['event_ce']:.3f}  [{time.time() - t0:.0f}s]"
+            f"mse {tr['mse']:.4f}  val nll {va['nll']:7.3f} hendelse {va['event_ce']:.3f} mse {va['mse']:.4f}  "
+            f"[{time.time() - t0:.0f}s]"
         )
 
     hparams = {
         "hidden_dim": hidden_dim, "num_mixtures": num_mixtures, "epochs": epochs, "batch_size": batch_size,
         "lr": lr, "event_weight": event_weight, "balance_events": balance_events, "input_mlp": input_mlp,
+        "mse_weight": mse_weight, "best_epoch": best_epoch,
         "seed": seed, "data": str(data),
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
+    model.load_state_dict(best_state)
     model.save(out, hparams=hparams, history=history)
-    log(f"Lagret {out}")
+    log(f"Lagret {out} (beste epoke: {best_epoch})")
     return {"hparams": hparams, "history": history}
 
 
@@ -176,12 +200,14 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--event-weight", type=float, default=1.0)
     p.add_argument("--no-balance-events", action="store_true", help="ikke vekt sjeldne hendelser opp")
     p.add_argument("--linear-input", action="store_true", help="z og handling rett inn i LSTM-en, som i artikkelen")
+    p.add_argument("--mse-weight", type=float, default=0.0, help="vekt på kvadratfeil for forventet z")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args(argv)
     result = train(
         args.data, args.out, hidden_dim=args.hidden_dim, num_mixtures=args.mixtures, epochs=args.epochs,
         batch_size=args.batch_size, lr=args.lr, event_weight=args.event_weight,
-        balance_events=not args.no_balance_events, input_mlp=not args.linear_input, seed=args.seed,
+        balance_events=not args.no_balance_events, input_mlp=not args.linear_input,
+        mse_weight=args.mse_weight, seed=args.seed,
     )
     print(json.dumps(result["history"][-1]))
 
