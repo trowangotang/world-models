@@ -116,3 +116,64 @@ ikke-lineær controller. Dette tar vi stilling til i steg 3–4, og proben gir o
 ### D15. Treningsoppsett
 Adam (lr 1e-3), batch 128, beta = 1, 12 epoker (~4 min per epoke på CPU med 3 kjøringer
 parallelt). Validering er 10 % av episodene, delt per episode. Checkpointer lagres utenfor git.
+
+---
+
+## 2026-09-27 · Steg 3: MDN-RNN
+
+### D16. Z-sekvenser kodes én gang på forhånd
+**Valg:** `python -m worldmodels.mdnrnn.encode` kjører VAE-en over alle 20 000 episodene og lagrer
+mu, logvar, handlinger, hendelser og agentens celle i én fil (40 MB).
+**Hvorfor:** RNN-en ser aldri bilder. Uten forhåndskoding ville hver epoke kjørt VAE-en på nytt.
+Agentens celle lagres bare for evaluering. Modellen trenes aldri på den.
+
+### D17. Hendelser i stedet for belønning
+**Valg:** Modellen klassifiserer hvert skritt som *flytt*, *mål* eller *hindring*, i stedet for å
+regrese belønningen og predikere "done" separat som i artikkelen.
+**Hvorfor:** I GridDodge bestemmes både belønning og episodeslutt fullt ut av hendelsen, så én
+klassifisering dekker begge. Avkorting etter 50 skritt regnes som et vanlig skritt, fordi det er en
+tidsgrense og ikke noe som skjer i verden.
+
+### D18. Hver blandingskomponent dekker hele z, og middelverdien er en endring fra z_t
+**Hvorfor:** I artikkelen har hver dimensjon sin egen blanding. Her er utfallene diskrete (agenten
+havner i én av få celler) og alle dimensjonene må endre seg sammen, så én komponent per utfall
+passer bedre. Siden nesten hele scenen står stille, lærer modellen bare endringen.
+
+### D19. Evaluering mot "ingenting endrer seg"
+**Hvorfor:** Lav NLL sier lite i seg selv. Vi dekoder prediksjonen med VAE-en, leser av agentens
+celle og sammenligner med en grunnlinje som kopierer z_t. Når agenten faktisk flytter seg, treffer
+grunnlinjen aldri, så forskjellen viser om modellen har lært dynamikken.
+
+### D20. Første forsøk: godt minne, men dårlig prediksjon av neste skritt
+**Funn:** Med artikkelens oppsett (z og handling rett inn i LSTM-en) traff modellen agentens neste
+celle i 50 % av skrittene, mot 28 % for kopiering. Men i **første** skritt av hver episode var den på
+kopinivå (10 %), mål ble aldri forutsett (0 %), og drømmer fra kald start sporet av med en gang.
+Samtidig kunne en lineær probe lese agentens posisjon ut av h i 80 % av tilfellene.
+Minnet visste altså hvor agenten var, men prediksjonen av neste z var svak.
+**Diagnose:** En vanlig MLP som predikerer z_{t+1} fra (z_t, a_t) med kvadratfeil, uten minne,
+traff 35 % i første skritt og 53 % totalt. Dynamikken kan altså læres fra z alene. Svakheten lå
+i hvordan MDN-RNN-en ble trent.
+
+### D21. Tre endringer som hjalp, og to som ikke gjorde det
+Målt som agentens celle etter ett skritt / når agenten flyttet seg (8 varianter, `docs/experiments/mdnrnn_*.json`):
+- **MSE-ledd på blandingens forventning (`--mse-weight 10`)**: 38 % → 55 % / 17 % → 41 %. NLL alene
+  lar modellen treffe de mange dimensjonene som ikke endrer seg og være slapp på de få som betyr noe.
+- **Direkte vei fra inndata til hodene**: små gevinster (55 % → 58 %), og mål-treff 7 % → 16 %.
+- **Tidlig stopp på dynamikken alene**: hendelseshodet overtilpasset seg etter ~10 epoker og ville
+  stoppet treningen for tidlig.
+- *Ikke hjulpet:* input-MLP alene og vekting av sjeldne hendelser. Vektingen økte treffene på
+  hindringer (14 % → 45 %), men presisjonen falt fra 65 % til 39 %, og modellen overtilpasset seg raskere.
+- *1 mot 5 komponenter:* nesten likt. Dynamikken er deterministisk, så blandingen gir lite.
+  Vi beholder 5 fordi det koster lite og gir rom for usikkerhet i drømmen.
+
+**Valgt modell:** `mdnrnn_direct_k5` (standardinnstillingene i `train.py`).
+
+### D22. Drømmer trenger oppvarming
+**Funn:** Fra kald start (bare z_0) er drømmen fortsatt på kopinivå. Hvis modellen først ser
+5 ekte skritt, slår drømmen grunnlinjen tydelig: 43 % mot 27 % etter ett skritt og 29 % mot 14 %
+etter seks skritt med egne prediksjoner. Men den sporer av over tid. I bildet
+`docs/experiments/mdnrnn_dream.png` ser man agenter som forsvinner og mål som dukker opp.
+**Konsekvens for steg 4:** Controlleren bør trenes i drømmer som starter etter noen ekte
+oppvarmingsskritt, og drømmene bør være korte (rundt 5–10 skritt). Mål-hendelser forutses bare i
+16 % av tilfellene, så en controller som trenes bare i drømmen vil få svakt signal om målet.
+Det må vi ta stilling til før steg 4.

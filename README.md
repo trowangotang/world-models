@@ -26,8 +26,8 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | Steg | Modul | Status |
 |------|-------|--------|
 | 1. Miljø + tilfeldige rollouts | `worldmodels/env`, `worldmodels/data` | ✅ ferdig og godkjent |
-| 2. VAE | `worldmodels/vae` | ✅ ferdig, venter på godkjenning |
-| 3. MDN-RNN | `worldmodels/mdnrnn` | ⏳ ikke påbegynt |
+| 2. VAE | `worldmodels/vae` | ✅ ferdig |
+| 3. MDN-RNN | `worldmodels/mdnrnn` | ✅ ferdig, venter på godkjenning |
 | 4. Controller trent i drømmen | `worldmodels/controller` | ⏳ ikke påbegynt |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ⏳ ikke påbegynt |
 
@@ -91,6 +91,19 @@ python -m worldmodels.vae.evaluate checkpoints/vae_z32_w10.pt \
     --data data/rollouts_20k --frames-per-episode 4 --image recon.png
 ```
 
+### Steg 3: kod z-sekvenser, tren og evaluer MDN-RNN-en
+
+```bash
+python -m worldmodels.mdnrnn.encode --vae checkpoints/vae_z32_w10.pt \
+    --data data/rollouts_20k --out data/zseq_20k.npz                           # ~3 min
+
+python -m worldmodels.mdnrnn.train --data data/zseq_20k.npz \
+    --out checkpoints/mdnrnn.pt                                                # 30 epoker, ~15 min
+
+python -m worldmodels.mdnrnn.evaluate checkpoints/mdnrnn.pt \
+    --vae checkpoints/vae_z32_w10.pt --image dream.png
+```
+
 ## Resultater fra steg 2
 
 ![Rekonstruksjoner](docs/experiments/vae_20k_recon.png)
@@ -114,6 +127,34 @@ med bare bakgrunn og hindringer gir ~87 % riktige celler.
 - Det første forsøket med bare 1000 episoder overtilpasset seg til layoutene. Resultatene ligger i
   `docs/experiments/vae_1000ep_*`.
 
+## Resultater fra steg 3
+
+MDN-RNN-en tar inn z_t og handlingen, og predikerer neste z og om skrittet ender i mål, hindring
+eller et vanlig flytt. Alle tall er på valideringsepisoder, og posisjonen leses av ved å dekode
+prediksjonen med VAE-en.
+
+| Mål | Artikkelens oppsett | Valgt modell | Grunnlinje: ingenting endrer seg |
+|-----|-----:|-----:|-----:|
+| Agenten i riktig celle etter ett skritt | 50 % | **58 %** | 28 % |
+| ... når agenten faktisk flyttet seg | 33 % | **44 %** | 0 % |
+| Drøm etter 5 ekte skritt: riktig celle etter 1 / 6 drømte skritt | 32 % / 21 % | **43 % / 29 %** | 27 % / 14 % |
+| Treff på mål / hindring | 0 % / 14 % | 16 % / 42 % | – |
+| Lineær probe: agentens celle fra (z, h) | 89 % | 84 % | fra z alene: 16 % |
+
+![Drøm mot virkelighet](docs/experiments/mdnrnn_dream.png)
+
+*To rader per episode: øverst det som faktisk skjedde, under drømmen. De fem første bildene er
+ekte, deretter drømmer modellen med de samme handlingene. Drømmen holder seg nær virkeligheten
+noen skritt, men sporer av: agenter blir borte, og mål dukker opp der det ikke var noe.*
+
+- **Minnet løser problemet fra steg 2.** Agentens posisjon kan ikke leses lineært fra z (16 %), men
+  fra RNN-ens skjulte tilstand kan den (84 %). En lineær controller på (z, h), som i artikkelen,
+  er dermed realistisk.
+- **Drømmer trenger oppvarming.** Fra kald start kopierer modellen bare z. Etter 5 ekte skritt
+  slår den grunnlinjen tydelig.
+- **Mål er vanskelige å forutse** (16 %). Det er den største svakheten før steg 4.
+- Veien hit gikk gjennom 8 varianter. Se D20–D22 i `decisions.md`.
+
 ## Prosjektstruktur
 
 ```
@@ -121,6 +162,7 @@ worldmodels/
   env/          GridDodge-miljøet og forhåndsvisning
   data/         tilfeldig policy og innsamling/lagring av rollouts
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
+  mdnrnn/       koding til z-sekvenser, MDN-RNN, trening og evaluering
 tests/          enhetstester (pytest)
 docs/           bilder til README og resultater fra eksperimenter
 decisions.md    logg over valg og begrunnelser
