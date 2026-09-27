@@ -5,8 +5,9 @@ så de måler det som betyr noe: havner agenten der den faktisk havnet?
 
   * Ett skritt fram: predikert z_{t+1} gitt ekte z_t og a_t. Sammenlignes med en
     grunnlinje som sier "ingenting endrer seg" (z_{t+1} = z_t).
-  * Drøm over k skritt: start fra ekte z_0, gi modellen de ekte handlingene, men mat den
-    med sine *egne* prediksjoner. Viser hvor fort drømmen sporer av.
+  * Drøm over k skritt: gi modellen de ekte handlingene, men mat den med sine *egne*
+    prediksjoner. Enten fra første bilde (ctx0), eller etter 5 ekte skritt som varmer opp
+    minnet (ctx5). Viser hvor fort drømmen sporer av.
   * Hendelser: hvor godt treffer modellen mål- og hinder-skrittene.
   * Prober på h: kan en lineær modell lese agentens posisjon ut av RNN-ens skjulte
     tilstand, og er det lettere enn fra z alene? (Spørsmålet fra D14.)
@@ -84,25 +85,40 @@ def one_step_metrics(model: MDNRNN, vae: ConvVAE, seqs: ZSequences, indices, bat
 
 
 @torch.no_grad()
-def dream_metrics(model: MDNRNN, vae: ConvVAE, seqs: ZSequences, indices, horizon: int = 10) -> dict:
+def dream_metrics(
+    model: MDNRNN, vae: ConvVAE, seqs: ZSequences, indices, horizon: int = 10, context: int = 0
+) -> dict:
     """Agent-celle-nøyaktighet etter k drømte skritt, for k = 1..horizon.
 
-    Bare episoder som varer minst k skritt teller for steg k.
+    Modellen får først se `context` ekte skritt (oppvarming av minnet), og drømmer deretter
+    videre med de ekte handlingene og sine egne prediksjoner. Bare episoder som varer lenge
+    nok teller for hvert k. Grunnlinjen sier at agenten blir stående der den var da drømmen
+    startet.
     """
-    b = make_batch(seqs, indices)
-    z = b.z_mu[:, 0:1]
+    keep = [i for i in indices if seqs.lengths[i] > context]
+    b = make_batch(seqs, keep)
     hidden = None
-    start_cells = decode_agent_cells(vae, b.z_mu[:, 0])            # grunnlinje: agenten står stille
-    correct = np.zeros(horizon)
-    copy_correct = np.zeros(horizon)
-    counts = np.zeros(horizon)
-    for k in range(min(horizon, b.actions.shape[1])):
-        out = model(z, b.actions[:, k:k + 1], hidden)
+    if context > 0:
+        warm = model(b.z_mu[:, :context], b.actions[:, :context])
+        hidden = warm.hidden
+        z = most_likely_mean(warm)[:, -1:]                            # prediksjon av z_context
+        # Vi mater modellens egen prediksjon av z_context videre, ikke den ekte. Da er alt etter
+        # oppvarmingen ren drøm, akkurat som når controlleren skal trenes.
+        first_action = context
+    else:
+        z = b.z_mu[:, 0:1]
+        first_action = 0
+    start_cells = decode_agent_cells(vae, b.z_mu[:, context])
+    steps = min(horizon, b.actions.shape[1] - first_action)
+    correct, copy_correct, counts = np.zeros(horizon), np.zeros(horizon), np.zeros(horizon)
+    for k in range(steps):
+        t = first_action + k
+        out = model(z, b.actions[:, t:t + 1], hidden)
         hidden = out.hidden
-        z = most_likely_mean(out)                                   # (B, 1, D), mates tilbake
-        alive = b.mask[:, k].numpy()
+        z = most_likely_mean(out)
+        alive = b.mask[:, t].numpy()
         cells = decode_agent_cells(vae, z[:, 0])
-        truth = b.agent_cell[:, k + 1].numpy()
+        truth = b.agent_cell[:, t + 1].numpy()
         correct[k] = ((cells == truth) & alive).sum()
         copy_correct[k] = ((start_cells == truth) & alive).sum()
         counts[k] = alive.sum()
@@ -149,14 +165,16 @@ def probe_metrics(model: MDNRNN, seqs: ZSequences, train_idx, val_idx, max_train
     return results
 
 
-def evaluate(checkpoint, vae_path, data, dream_horizon: int = 10) -> dict:
+def evaluate(checkpoint, vae_path, data, dream_horizon: int = 10, contexts=(0, 5)) -> dict:
     model, ckpt = MDNRNN.load(checkpoint)
     vae, _ = ConvVAE.load(vae_path)
     seqs = ZSequences.load(data)
     train_idx, val_idx = split_indices(len(seqs), seed=ckpt.get("hparams", {}).get("seed", 0))
     result = {"checkpoint": str(checkpoint), "hparams": ckpt.get("hparams", {})}
     result.update(one_step_metrics(model, vae, seqs, val_idx))
-    result.update(dream_metrics(model, vae, seqs, val_idx, dream_horizon))
+    for c in contexts:
+        d = dream_metrics(model, vae, seqs, val_idx, dream_horizon, context=c)
+        result.update({f"{k}_ctx{c}": v for k, v in d.items()})
     result.update(probe_metrics(model, seqs, train_idx, val_idx))
     return result
 

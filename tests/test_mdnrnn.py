@@ -145,6 +145,8 @@ def test_evaluation_runs_end_to_end(seqs):
     dream = dream_metrics(model, vae, seqs, idx, horizon=3)
     assert len(dream["dream_agent_cell_acc"]) == 3
     assert dream["dream_episodes_alive"][0] == len(seqs)
+    warm = dream_metrics(model, vae, seqs, idx, horizon=3, context=2)
+    assert warm["dream_episodes_alive"][0] == int((seqs.lengths > 2).sum())
     probes = probe_metrics(model, seqs, idx[:4], idx[4:])
     assert set(probes) == {"probe_agent_linear_z", "probe_agent_linear_h", "probe_agent_linear_z_and_h"}
 
