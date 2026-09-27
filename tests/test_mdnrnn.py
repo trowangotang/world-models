@@ -130,3 +130,20 @@ def test_save_and_load_roundtrip(tmp_path):
     loaded, _ = MDNRNN.load(tmp_path / "m.pt")
     z, a = torch.randn(1, 3, 4), torch.randint(0, 4, (1, 3))
     assert torch.allclose(model(z, a).mu, loaded(z, a).mu)
+
+
+def test_evaluation_runs_end_to_end(seqs):
+    from worldmodels.mdnrnn.evaluate import dream_metrics, one_step_metrics, probe_metrics
+
+    torch.manual_seed(0)
+    vae = ConvVAE(VAEConfig(latent_dim=4)).eval()
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2)).eval()
+    idx = np.arange(len(seqs))
+    one = one_step_metrics(model, vae, seqs, idx)
+    assert one["steps"] == int(seqs.lengths.sum())
+    assert 0.0 <= one["agent_cell_acc"] <= 1.0
+    dream = dream_metrics(model, vae, seqs, idx, horizon=3)
+    assert len(dream["dream_agent_cell_acc"]) == 3
+    assert dream["dream_episodes_alive"][0] == len(seqs)
+    probes = probe_metrics(model, seqs, idx[:4], idx[4:])
+    assert set(probes) == {"probe_agent_linear_z", "probe_agent_linear_h", "probe_agent_linear_z_and_h"}
