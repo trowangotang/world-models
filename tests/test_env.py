@@ -100,3 +100,16 @@ def test_render_ascii_matches_layout():
     env.reset(seed=0)
     env.agent_pos, env.goal_pos, env.obstacles = (0, 0), (2, 2), frozenset({(1, 1)})
     assert env.render_ascii() == "A..\n.#.\n..G"
+
+
+def test_save_png_writes_valid_png_header(tmp_path):
+    from worldmodels.env.preview import save_png
+
+    img = np.zeros((4, 5, 3), dtype=np.uint8)
+    path = tmp_path / "x.png"
+    save_png(img, path)
+    data = path.read_bytes()
+    assert data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert data[12:16] == b"IHDR"
+    assert int.from_bytes(data[16:20], "big") == 5   # bredde
+    assert int.from_bytes(data[20:24], "big") == 4   # høyde
