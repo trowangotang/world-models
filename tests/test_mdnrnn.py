@@ -183,3 +183,14 @@ def test_old_checkpoint_config_loads_without_new_layers(tmp_path):
                 "state_dict": old.state_dict()}, tmp_path / "old.pt")
     loaded, _ = MDNRNN.load(tmp_path / "old.pt")
     assert loaded.trunk is None and isinstance(loaded.input_net, torch.nn.Identity)
+
+
+def test_dream_image_has_two_rows_per_episode(seqs):
+    from worldmodels.mdnrnn.evaluate import dream_image
+
+    vae = ConvVAE(VAEConfig(latent_dim=4)).eval()
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8)).eval()
+    long_eps = [i for i in range(len(seqs)) if seqs.lengths[i] >= 4][:2]
+    img = dream_image(model, vae, seqs, long_eps, context=2, steps=2)
+    assert img.dtype == np.uint8 and img.shape[2] == 3
+    assert img.shape[0] == 2 * len(long_eps) * (128 + 2) + 2

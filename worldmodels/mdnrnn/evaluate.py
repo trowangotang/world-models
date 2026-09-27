@@ -165,6 +165,31 @@ def probe_metrics(model: MDNRNN, seqs: ZSequences, train_idx, val_idx, max_train
     return results
 
 
+@torch.no_grad()
+def dream_image(model: MDNRNN, vae: ConvVAE, seqs: ZSequences, episodes, context: int = 5, steps: int = 8) -> np.ndarray:
+    """Bilde med to rader per episode: virkeligheten (dekodet ekte z) og drømmen.
+
+    De første `context` kolonnene er like, fordi modellen da ser ekte bilder.
+    """
+    from worldmodels.env.preview import episode_grid
+
+    rows = []
+    for i in episodes:
+        b = make_batch(seqs, [i])
+        T = min(context + steps, b.actions.shape[1])
+        out = model(b.z_mu[:, :context], b.actions[:, :context])
+        hidden, z = out.hidden, most_likely_mean(out)[:, -1:]
+        dream = [b.z_mu[0, t] for t in range(context)] + [z[0, 0]]
+        for t in range(context, T - 1):
+            out = model(z, b.actions[:, t:t + 1], hidden)
+            hidden, z = out.hidden, most_likely_mean(out)
+            dream.append(z[0, 0])
+        real = b.z_mu[0, :T]
+        for zs in (real, torch.stack(dream)):
+            rows.append((vae.decode(zs).permute(0, 2, 3, 1).numpy() * 255).round().astype(np.uint8))
+    return episode_grid(rows, frames=max(len(r) for r in rows))
+
+
 def evaluate(checkpoint, vae_path, data, dream_horizon: int = 10, contexts=(0, 5)) -> dict:
     model, ckpt = MDNRNN.load(checkpoint)
     vae, _ = ConvVAE.load(vae_path)
@@ -186,6 +211,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--data", default="data/zseq_20k.npz")
     p.add_argument("--horizon", type=int, default=10)
     p.add_argument("--json", default=None)
+    p.add_argument("--image", default=None, help="lagre bilde av drøm mot virkelighet")
     args = p.parse_args(argv)
     r = evaluate(args.checkpoint, args.vae, args.data, args.horizon)
     for k, v in r.items():
@@ -193,6 +219,16 @@ def main(argv: list[str] | None = None) -> None:
             print(f"{k:32s} {v if isinstance(v, list) else round(v, 4)}")
     if args.json:
         Path(args.json).write_text(json.dumps(r, indent=2))
+    if args.image:
+        from worldmodels.env.preview import save_png
+
+        model, ckpt = MDNRNN.load(args.checkpoint)
+        vae, _ = ConvVAE.load(args.vae)
+        seqs = ZSequences.load(args.data)
+        _, val_idx = split_indices(len(seqs), seed=ckpt.get("hparams", {}).get("seed", 0))
+        long_eps = [i for i in val_idx if seqs.lengths[i] >= 13][:3]
+        save_png(dream_image(model, vae, seqs, long_eps), args.image)
+        print(f"Skrev {args.image}")
 
 
 if __name__ == "__main__":
