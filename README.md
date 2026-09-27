@@ -26,7 +26,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | Steg | Modul | Status |
 |------|-------|--------|
 | 1. Miljø + tilfeldige rollouts | `worldmodels/env`, `worldmodels/data` | ✅ ferdig og godkjent |
-| 2. VAE | `worldmodels/vae` | ⏳ ikke påbegynt |
+| 2. VAE | `worldmodels/vae` | ✅ ferdig, venter på godkjenning |
 | 3. MDN-RNN | `worldmodels/mdnrnn` | ⏳ ikke påbegynt |
 | 4. Controller trent i drømmen | `worldmodels/controller` | ⏳ ikke påbegynt |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ⏳ ikke påbegynt |
@@ -76,13 +76,52 @@ python -m worldmodels.env.preview --out preview.png --episodes 5 --frames 12
 Med 1000 episoder og seed 0 gir den tilfeldige policyen 15 532 overganger
 (snitt 15,5 skritt): 11 % når målet, 82 % treffer en hindring, 7 % avkortes.
 
+### Steg 2: tren og evaluer VAE-en
+
+VAE-en trenger mange *layouter*, ikke bare mange bilder (se D12 i `decisions.md`).
+Derfor samler vi 20 000 episoder og bruker høyst 4 bilder fra hver.
+
+```bash
+python -m worldmodels.data --episodes 20000 --out data/rollouts_20k                # ~35 s, 84 MB
+
+python -m worldmodels.vae.train --data data/rollouts_20k --frames-per-episode 4 \
+    --latent-dim 32 --object-weight 10 --epochs 12 --out checkpoints/vae_z32_w10.pt  # ~45 min på CPU
+
+python -m worldmodels.vae.evaluate checkpoints/vae_z32_w10.pt \
+    --data data/rollouts_20k --frames-per-episode 4 --image recon.png
+```
+
+## Resultater fra steg 2
+
+![Rekonstruksjoner](docs/experiments/vae_20k_recon.png)
+
+*Øverst: originaler fra valideringsepisoder (layouter VAE-en aldri har sett). Deretter
+16 dim uten vekting, 16 dim med objektvekting og 32 dim med objektvekting.*
+
+| Variant | Pikselfeil (MSE) | Riktige celler | Hele layouten riktig | Agent i riktig celle | Probe agent: lineær / MLP |
+|---------|-----:|-----:|-----:|-----:|-----:|
+| 16 dim, uten vekting | 0,0068 | 96,2 % | 0 % | 0 % | 3 % / 3 % |
+| 16 dim, vekt 10 | 0,0036 | 98,2 % | 30 % | 77 % | 2 % / 34 % |
+| **32 dim, vekt 10** | **0,0016** | **99,2 %** | **65 %** | **90 %** | **11 % / 53 %** |
+
+Alle tall er på valideringsepisodene. Tilfeldig gjetting på agentens celle gir 1,6 %, og et bilde
+med bare bakgrunn og hindringer gir ~87 % riktige celler.
+
+- **Objektvektingen er avgjørende.** Uten den tegner VAE-en aldri agenten eller målet.
+- **32 dimensjoner slår 16** på alle mål, så `vae_z32_w10` er modellen vi bygger videre på.
+- **Posisjonen er i z, men ikke lineært.** En lineær probe finner agentens celle i 11 % av tilfellene,
+  en liten MLP i 53 %. Det påvirker valget av controller senere (se D14).
+- Det første forsøket med bare 1000 episoder overtilpasset seg til layoutene. Resultatene ligger i
+  `docs/experiments/vae_1000ep_*`.
+
 ## Prosjektstruktur
 
 ```
 worldmodels/
   env/          GridDodge-miljøet og forhåndsvisning
   data/         tilfeldig policy og innsamling/lagring av rollouts
+  vae/          modell, tap, datasett, trening og evaluering av VAE-en
 tests/          enhetstester (pytest)
-docs/           bilder til README
+docs/           bilder til README og resultater fra eksperimenter
 decisions.md    logg over valg og begrunnelser
 ```
