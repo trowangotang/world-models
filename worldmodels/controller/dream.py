@@ -1,0 +1,125 @@
+"""Drømmen: et simulert miljø der MDN-RNN-en spiller verden.
+
+Controlleren trenes her i stedet for i det ekte miljøet. Oppsettet følger funnene fra steg 3
+(decisions.md D22):
+
+  * **Oppvarming.** Hver drøm starter fra en ekte episode. RNN-en ser de første `context`
+    ekte skrittene (fra datasettet med tilfeldige handlinger), slik at minnet vet hvor agenten er.
+    Deretter overtar controlleren, og alt videre er drøm.
+  * **Korte drømmer.** Drømmen sporer av etter 6–8 skritt, så vi drømmer `horizon` skritt (10).
+  * **Forventet belønning.** I stedet for å trekke én hendelse per skritt bruker vi
+    sannsynlighetene fra hendelseshodet: forventet belønning i skrittet, og sannsynligheten for
+    at episoden fortsatt lever. Det gir mye mindre støy i fitness enn å trekke utfall.
+  * **Temperatur.** Neste z trekkes fra blandingen med temperatur tau. Litt støy gjør det
+    vanskeligere for controlleren å utnytte feil i drømmen (et poeng fra artikkelen).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+import torch
+from torch.nn import functional as F
+
+from worldmodels.controller.policy import LinearController
+from worldmodels.env import GridConfig
+from worldmodels.mdnrnn.encode import EVENT_GOAL, EVENT_MOVE, EVENT_OBSTACLE, ZSequences
+from worldmodels.mdnrnn.model import MDNRNN, most_likely_mean, sample_next
+from worldmodels.mdnrnn.train import make_batch
+
+
+@dataclass
+class WarmStarts:
+    """Tilstanden etter oppvarming for et sett ekte episoder."""
+    z: torch.Tensor        # (N, D) modellens prediksjon av z etter oppvarming
+    h: torch.Tensor        # (1, N, H) LSTM-tilstand
+    c: torch.Tensor        # (1, N, H)
+    episodes: np.ndarray   # (N,) hvilke episoder startene kom fra
+
+    def __len__(self) -> int:
+        return len(self.episodes)
+
+    def sample(self, n: int, rng: np.random.Generator) -> "WarmStarts":
+        idx = rng.choice(len(self), size=min(n, len(self)), replace=False)
+        return WarmStarts(self.z[idx], self.h[:, idx], self.c[:, idx], self.episodes[idx])
+
+
+@torch.no_grad()
+def make_warm_starts(model: MDNRNN, seqs: ZSequences, indices, context: int = 5, batch_size: int = 1024) -> WarmStarts:
+    """Kjør RNN-en over de første `context` ekte skrittene av hver episode som varer så lenge."""
+    model.eval()
+    keep = np.array([i for i in indices if seqs.lengths[i] > context])
+    zs, hs, cs = [], [], []
+    for start in range(0, len(keep), batch_size):
+        b = make_batch(seqs, keep[start:start + batch_size])
+        out = model(b.z_mu[:, :context], b.actions[:, :context])
+        zs.append(most_likely_mean(out)[:, -1])
+        hs.append(out.hidden[0])
+        cs.append(out.hidden[1])
+    return WarmStarts(torch.cat(zs), torch.cat(hs, dim=1), torch.cat(cs, dim=1), keep)
+
+
+@dataclass(frozen=True)
+class DreamConfig:
+    horizon: int = 10
+    temperature: float = 1.0
+    reward_goal: float = GridConfig.reward_goal
+    reward_obstacle: float = GridConfig.reward_obstacle
+    reward_step: float = GridConfig.reward_step
+
+
+@torch.no_grad()
+def dream_fitness(
+    controller: LinearController,
+    population: np.ndarray,
+    model: MDNRNN,
+    starts: WarmStarts,
+    config: DreamConfig = DreamConfig(),
+    generator: torch.Generator | None = None,
+    return_details: bool = False,
+):
+    """Forventet drømmeavkastning for hver kandidat, snittet over alle startene.
+
+    population: (P, num_params). Alle P kandidater drømmer fra de samme B startene, i én batch
+    med P * B drømmer. Returnerer (P,) numpy, eller en dict med detaljer.
+    """
+    model.eval()
+    P, B = len(population), len(starts)
+    D = starts.z.shape[1]
+    z = starts.z.repeat(P, 1)                                          # (P*B, D)
+    hidden = (starts.h.repeat(1, P, 1), starts.c.repeat(1, P, 1))
+    alive = torch.ones(P * B)
+    total = torch.zeros(P * B)
+    p_goal_sum = torch.zeros(P * B)
+    p_obstacle_sum = torch.zeros(P * B)
+    action_counts = torch.zeros(controller.num_actions)
+    for _ in range(config.horizon):
+        h = hidden[0][-1]
+        logits = controller.batched_logits(population, z.view(P, B, D), h.view(P, B, -1))
+        a = logits.argmax(-1).view(P * B)
+        action_counts += torch.bincount(a, minlength=controller.num_actions)
+        out = model(z.unsqueeze(1), a.unsqueeze(1), hidden)
+        hidden = out.hidden
+        p = F.softmax(out.event_logits[:, 0], dim=-1)
+        expected = (
+            p[:, EVENT_MOVE] * config.reward_step
+            + p[:, EVENT_GOAL] * config.reward_goal
+            + p[:, EVENT_OBSTACLE] * config.reward_obstacle
+        )
+        total += alive * expected
+        p_goal_sum += alive * p[:, EVENT_GOAL]
+        p_obstacle_sum += alive * p[:, EVENT_OBSTACLE]
+        alive = alive * p[:, EVENT_MOVE]
+        nxt = sample_next(out, config.temperature, generator) if config.temperature > 0 else most_likely_mean(out)
+        z = nxt[:, 0]
+    fitness = total.view(P, B).mean(1).numpy()
+    if not return_details:
+        return fitness
+    return {
+        "fitness": fitness,
+        "p_goal": p_goal_sum.view(P, B).mean(1).numpy(),
+        "p_obstacle": p_obstacle_sum.view(P, B).mean(1).numpy(),
+        "p_alive_end": alive.view(P, B).mean(1).numpy(),
+        "action_share": (action_counts / action_counts.sum()).numpy(),
+    }
