@@ -200,3 +200,14 @@ def test_controller_with_position_features_runs_in_dream_and_real_env(world, tmp
     assert LinearController.load(tmp_path / "c.npz").extra_dim == 4
     stats = run_real_episodes(WorldModelAgent(vae, rnn, c), num_episodes=3)
     assert stats["episodes"] == 3
+
+
+def test_remaining_steps_charges_only_survivors(world):
+    _, rnn, seqs = world
+    c = LinearController(4, 8)
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
+    pop = np.zeros((1, c.num_params))
+    base = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0), return_details=True)
+    charged = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0, remaining_steps=10))
+    expected = base["fitness"] + base["p_alive_end"] * 10 * DreamConfig.reward_step
+    assert np.allclose(charged, expected, atol=1e-5)
