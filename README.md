@@ -29,6 +29,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 2. VAE | `worldmodels/vae` | ✅ ferdig |
 | 3. MDN-RNN | `worldmodels/mdnrnn` | ✅ ferdig |
 | 4. Controller trent i drømmen | `worldmodels/controller` | ⚠️ virker, men når sjelden målet |
+| 4b. Iterativ trening | `worldmodels/controller/iterate.py` | ⚠️ fjerner utnyttelsen av drømmen, ikke flere mål |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ⏳ ikke påbegynt |
 
 ## Miljøet: GridDodge
@@ -114,6 +115,17 @@ python -m worldmodels.controller.train --vae checkpoints/vae_z32_w10.pt \
 
 Loggen viser både hvor godt controlleren gjør det i drømmen og i det ekte miljøet.
 
+### Steg 4b: iterativ trening
+
+```bash
+python -m worldmodels.controller.iterate --vae checkpoints/vae_z32_w10.pt \
+    --rnn checkpoints/mdnrnn_direct_k5.pt --controller checkpoints/controller_s256.npz \
+    --data data/zseq_20k.npz --rounds 3 --out-dir checkpoints/iter          # ~8 min per runde
+```
+
+Hver runde samler 5000 ekte episoder med controlleren (30 % tilfeldige handlinger), trener
+MDN-RNN-en og controlleren videre, og måler resultatet. Alt lagres i `checkpoints/iter/`.
+
 ## Resultater fra steg 2
 
 ![Rekonstruksjoner](docs/experiments/vae_20k_recon.png)
@@ -184,6 +196,23 @@ episoder den aldri har sett.
   lærer å utnytte feil i drømmen i stedet for å finne målet.
 - Høyere temperatur i drømmen, som artikkelen foreslår, hjalp ikke. Se D26–D27.
 
+## Resultater fra steg 4b
+
+Controlleren samler nye ekte data, MDN-RNN-en trenes videre på dem, og controlleren trenes på
+nytt i den bedre drømmen. Tre runder, 1000 ekte evalueringsepisoder per runde:
+
+| Runde | Drøm: mål | Ekte: mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|---:|
+| 0 (steg 4) | 36 % | 8 % | 35 % | 57 % | −0,57 |
+| 1 | 5 % | 6 % | 33 % | 61 % | −0,58 |
+| 3 | 8 % | 6 % | 30 % | 65 % | −0,57 |
+
+- **Drømmen lures ikke lenger.** Allerede etter første runde stemmer drømmens målrate med virkeligheten.
+- **Krasjene går ned** fra 35 % til 30 %, og M forutser nå 66 % av krasjene i controllerens
+  data (før: 37 %).
+- **Målet er fortsatt flaskehalsen.** M forutser bare 17 % av mål-hendelsene, og en helt ny
+  controller trent i den nye drømmen når målet i bare 3 %. Se D28–D30.
+
 ## Prosjektstruktur
 
 ```
@@ -192,7 +221,7 @@ worldmodels/
   data/         tilfeldig policy og innsamling/lagring av rollouts
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
   mdnrnn/       koding til z-sekvenser, MDN-RNN, trening og evaluering
-  controller/   lineær controller, evolusjonsstrategi, drømmemiljø og kjøring i ekte miljø
+  controller/   lineær controller, evolusjonsstrategi, drømmemiljø, kjøring i ekte miljø og iterativ trening
 tests/          enhetstester (pytest)
 docs/           bilder til README og resultater fra eksperimenter
 decisions.md    logg over valg og begrunnelser
