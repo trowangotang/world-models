@@ -96,7 +96,10 @@ def dream_fitness(
     action_counts = torch.zeros(controller.num_actions)
     for _ in range(config.horizon):
         h = hidden[0][-1]
-        logits = controller.batched_logits(population, z.view(P, B, D), h.view(P, B, -1))
+        extra = model.position_features(h) if controller.extra_dim else None
+        logits = controller.batched_logits(
+            population, z.view(P, B, D), h.view(P, B, -1), None if extra is None else extra.view(P, B, -1)
+        )
         a = logits.argmax(-1).view(P * B)
         action_counts += torch.bincount(a, minlength=controller.num_actions)
         out = model(z.unsqueeze(1), a.unsqueeze(1), hidden)

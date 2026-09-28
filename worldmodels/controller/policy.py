@@ -16,13 +16,15 @@ import torch
 
 
 class LinearController:
-    def __init__(self, z_dim: int, h_dim: int, num_actions: int = 4):
-        self.z_dim, self.h_dim, self.num_actions = z_dim, h_dim, num_actions
+    """extra_dim > 0 gir controlleren ekstra inndata etter [z, h], f.eks. M sin tro om posisjoner."""
+
+    def __init__(self, z_dim: int, h_dim: int, num_actions: int = 4, extra_dim: int = 0):
+        self.z_dim, self.h_dim, self.num_actions, self.extra_dim = z_dim, h_dim, num_actions, extra_dim
         self.params = np.zeros(self.num_params, dtype=np.float32)
 
     @property
     def in_dim(self) -> int:
-        return self.z_dim + self.h_dim
+        return self.z_dim + self.h_dim + self.extra_dim
 
     @property
     def num_params(self) -> int:
@@ -37,25 +39,35 @@ class LinearController:
         b = p[..., n_w:].reshape(*lead, self.num_actions)
         return W, b
 
-    def logits(self, z: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
-        """z: (B, z_dim), h: (B, h_dim) -> (B, num_actions)."""
+    def _inputs(self, z, h, extra):
+        parts = [z, h] if extra is None or self.extra_dim == 0 else [z, h, extra]
+        return torch.cat(parts, dim=-1)
+
+    def logits(self, z: torch.Tensor, h: torch.Tensor, extra: torch.Tensor | None = None) -> torch.Tensor:
+        """z: (B, z_dim), h: (B, h_dim), extra: (B, extra_dim) -> (B, num_actions)."""
         W, b = self.unflatten(self.params)
-        return torch.cat([z, h], dim=-1) @ W + b
+        return self._inputs(z, h, extra) @ W + b
 
-    def act(self, z: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
-        return self.logits(z, h).argmax(-1)
+    def act(self, z: torch.Tensor, h: torch.Tensor, extra: torch.Tensor | None = None) -> torch.Tensor:
+        return self.logits(z, h, extra).argmax(-1)
 
-    def batched_logits(self, population: np.ndarray, z: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
+    def batched_logits(
+        self, population: np.ndarray, z: torch.Tensor, h: torch.Tensor, extra: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """population: (P, num_params), z: (P, B, z_dim), h: (P, B, h_dim) -> (P, B, num_actions)."""
         W, b = self.unflatten(population)
-        return torch.einsum("pbi,pia->pba", torch.cat([z, h], dim=-1), W) + b[:, None, :]
+        return torch.einsum("pbi,pia->pba", self._inputs(z, h, extra), W) + b[:, None, :]
 
     def save(self, path, **extra) -> None:
-        np.savez(path, params=self.params, z_dim=self.z_dim, h_dim=self.h_dim, num_actions=self.num_actions, **extra)
+        np.savez(
+            path, params=self.params, z_dim=self.z_dim, h_dim=self.h_dim, num_actions=self.num_actions,
+            extra_dim=self.extra_dim, **extra,
+        )
 
     @classmethod
     def load(cls, path) -> "LinearController":
         with np.load(path, allow_pickle=False) as d:
-            c = cls(int(d["z_dim"]), int(d["h_dim"]), int(d["num_actions"]))
+            extra_dim = int(d["extra_dim"]) if "extra_dim" in d.files else 0
+            c = cls(int(d["z_dim"]), int(d["h_dim"]), int(d["num_actions"]), extra_dim)
             c.params = d["params"].astype(np.float32)
         return c

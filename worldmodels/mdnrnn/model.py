@@ -105,6 +105,27 @@ class MDNRNN(nn.Module):
             ),
         )
 
+    @property
+    def num_position_features(self) -> int:
+        return 4 if self.position_head is not None else 0
+
+    def position_features(self, h: torch.Tensor) -> torch.Tensor:
+        """Modellens tro om hvor agenten og målet er, som forventet (rad, kolonne) i [-1, 1].
+
+        h: (..., H) -> (..., 4) = [agent rad, agent kolonne, mål rad, mål kolonne]. Tom (..., 0)
+        uten posisjonshode. Retningen til målet blir da en lineær funksjon av inndata, noe en
+        lineær controller kan bruke direkte (decisions.md D32).
+        """
+        if self.position_head is None:
+            return h.new_zeros(*h.shape[:-1], 0)
+        G = self.config.grid_cells
+        side = int(round(G ** 0.5))
+        probs = F.softmax(self.position_head(h).view(*h.shape[:-1], 2, G), dim=-1)
+        coords = torch.linspace(-1, 1, side, device=h.device)
+        rows = (probs.view(*probs.shape[:-1], side, side).sum(-1) * coords).sum(-1)  # (..., 2)
+        cols = (probs.view(*probs.shape[:-1], side, side).sum(-2) * coords).sum(-1)
+        return torch.stack([rows[..., 0], cols[..., 0], rows[..., 1], cols[..., 1]], dim=-1)
+
     # ------------------------------------------------------------ lagring
     def save(self, path, **extra) -> None:
         torch.save({"config": asdict(self.config), "state_dict": self.state_dict(), **extra}, path)
