@@ -34,6 +34,8 @@ class MDNRNNConfig:
     num_mixtures: int = 5
     input_mlp: bool = True
     direct_path: bool = True
+    position_head: bool = False
+    grid_cells: int = 64
 
 
 @dataclass
@@ -44,6 +46,7 @@ class MDNOutput:
     event_logits: torch.Tensor  # (B, T, NUM_EVENTS)
     hidden: tuple[torch.Tensor, torch.Tensor]
     h: torch.Tensor          # (B, T, H) skjult tilstand etter hvert skritt
+    position_logits: torch.Tensor | None = None  # (B, T, 2, celler): agent og mål etter skrittet
 
 
 class MDNRNN(nn.Module):
@@ -73,6 +76,10 @@ class MDNRNN(nn.Module):
         self.mu_head = nn.Linear(head_in, c.num_mixtures * c.latent_dim)
         self.sigma_head = nn.Linear(head_in, c.num_mixtures * c.latent_dim)
         self.event_head = nn.Linear(head_in, NUM_EVENTS)
+        # Hjelpehode: hvor er agenten og målet? Det er lineært fra h med vilje, slik at
+        # posisjonene blir lineært lesbare fra minnet, som er det den lineære controlleren ser.
+        # Brukes bare som ekstra tap under trening (decisions.md D31).
+        self.position_head = nn.Linear(c.hidden_dim, 2 * c.grid_cells) if c.position_head else None
 
     def forward(
         self, z: torch.Tensor, actions: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor] | None = None
@@ -93,6 +100,9 @@ class MDNRNN(nn.Module):
             event_logits=self.event_head(feat),
             hidden=hidden,
             h=h,
+            position_logits=(
+                self.position_head(h).view(B, T, 2, c.grid_cells) if self.position_head is not None else None
+            ),
         )
 
     # ------------------------------------------------------------ lagring

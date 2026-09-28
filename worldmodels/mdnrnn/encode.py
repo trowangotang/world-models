@@ -9,6 +9,7 @@ lagrer resultatet i én .npz-fil, slik at RNN-treningen blir rask.
 Filen inneholder episodene etter hverandre ("flatet ut"):
     mu, logvar     (sum(T_i + 1), D)  z-fordelingen for hver observasjon
     agent_cell     (sum(T_i + 1),)    agentens celle i originalbildet (for evaluering)
+    goal_cell      (sum(T_i + 1),)    målets celle (fast gjennom episoden, -1 i eldre filer)
     actions        (sum(T_i),)
     events         (sum(T_i),)        EVENT_MOVE / EVENT_GOAL / EVENT_OBSTACLE
     lengths        (N,)               T_i, antall skritt i episode i
@@ -24,7 +25,7 @@ import numpy as np
 import torch
 
 from worldmodels.data import Episode, episode_paths, load_episode
-from worldmodels.env.parse import AGENT, find_cell, parse_cells
+from worldmodels.env.parse import AGENT, GOAL, find_cell, parse_cells
 from worldmodels.vae.dataset import iterate_minibatches
 from worldmodels.vae.model import ConvVAE
 
@@ -43,6 +44,9 @@ def episode_events(ep: Episode) -> np.ndarray:
     return events
 
 
+PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "actions", "events")
+
+
 @dataclass
 class ZSequences:
     mu: np.ndarray
@@ -51,6 +55,7 @@ class ZSequences:
     actions: np.ndarray
     events: np.ndarray
     lengths: np.ndarray
+    goal_cell: np.ndarray
 
     def __len__(self) -> int:
         return len(self.lengths)
@@ -71,6 +76,7 @@ class ZSequences:
             "mu": self.mu[o:o + T + 1],
             "logvar": self.logvar[o:o + T + 1],
             "agent_cell": self.agent_cell[o:o + T + 1],
+            "goal_cell": self.goal_cell[o:o + T + 1],
             "actions": self.actions[s:s + T],
             "events": self.events[s:s + T],
         }
@@ -78,7 +84,7 @@ class ZSequences:
     def subset(self, indices) -> "ZSequences":
         eps = [self.episode(i) for i in indices]
         return ZSequences(
-            **{k: np.concatenate([e[k] for e in eps]) for k in ("mu", "logvar", "agent_cell", "actions", "events")},
+            **{k: np.concatenate([e[k] for e in eps]) for k in PER_STEP_FIELDS},
             lengths=self.lengths[list(indices)].copy(),
         )
 
@@ -88,7 +94,10 @@ class ZSequences:
     @classmethod
     def load(cls, path: str | Path) -> "ZSequences":
         with np.load(path) as d:
-            return cls(**{k: d[k] for k in ("mu", "logvar", "agent_cell", "actions", "events", "lengths")})
+            fields = {k: d[k] for k in d.files}
+        # Filer kodet før målets celle ble lagret: ukjent overalt
+        fields.setdefault("goal_cell", np.full(len(fields["agent_cell"]), -1, dtype=np.int64))
+        return cls(**fields)
 
     @classmethod
     def concat(cls, parts: list["ZSequences"]) -> "ZSequences":
@@ -105,7 +114,7 @@ class ZSequences:
 @torch.no_grad()
 def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> ZSequences:
     vae.eval()
-    parts = {k: [] for k in ("mu", "logvar", "agent_cell", "actions", "events")}
+    parts = {k: [] for k in PER_STEP_FIELDS}
     lengths = []
     for p in paths:
         ep = load_episode(p)
@@ -116,7 +125,10 @@ def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> Z
             logvars.append(logvar.numpy())
         parts["mu"].append(np.concatenate(mus))
         parts["logvar"].append(np.concatenate(logvars))
-        parts["agent_cell"].append(find_cell(parse_cells(ep.obs), AGENT))
+        cells = parse_cells(ep.obs)
+        parts["agent_cell"].append(find_cell(cells, AGENT))
+        # Målet flytter seg aldri, men skjules når agenten står på det. Bruk første bilde.
+        parts["goal_cell"].append(np.full(len(ep.obs), find_cell(cells[:1], GOAL)[0], dtype=np.int64))
         parts["actions"].append(ep.actions)
         parts["events"].append(episode_events(ep))
         lengths.append(len(ep))

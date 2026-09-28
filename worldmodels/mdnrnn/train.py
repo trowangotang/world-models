@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from worldmodels.mdnrnn.encode import NUM_EVENTS, ZSequences
+from worldmodels.mdnrnn.encode import EVENT_GOAL, NUM_EVENTS, ZSequences
 from worldmodels.mdnrnn.model import MDNRNN, MDNRNNConfig, mdn_nll
 
 
@@ -31,6 +31,7 @@ class Batch:
     actions: torch.Tensor    # (B, T)
     events: torch.Tensor     # (B, T)
     agent_cell: torch.Tensor # (B, T+1)
+    goal_cell: torch.Tensor  # (B, T+1), -1 der den er ukjent
     mask: torch.Tensor       # (B, T) True for ekte skritt, False for utfylling
 
     def inputs(self, sample: bool, generator: torch.Generator | None = None) -> torch.Tensor:
@@ -55,6 +56,7 @@ def make_batch(seqs: ZSequences, indices) -> Batch:
     actions = np.zeros((B, T), np.int64)
     events = np.zeros((B, T), np.int64)
     agent = np.full((B, T + 1), -1, np.int64)
+    goal = np.full((B, T + 1), -1, np.int64)
     mask = np.zeros((B, T), bool)
     for b, e in enumerate(eps):
         n = len(e["actions"])
@@ -63,15 +65,26 @@ def make_batch(seqs: ZSequences, indices) -> Batch:
         actions[b, :n] = e["actions"]
         events[b, :n] = e["events"]
         agent[b, :n + 1] = e["agent_cell"]
+        goal[b, :n + 1] = e["goal_cell"]
         mask[b, :n] = True
     t = torch.from_numpy
-    return Batch(t(z_mu), t(z_logvar), t(actions), t(events), t(agent), t(mask))
+    return Batch(t(z_mu), t(z_logvar), t(actions), t(events), t(agent), t(goal), t(mask))
 
 
 def split_indices(n: int, val_fraction: float = 0.1, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
     order = np.random.default_rng(seed).permutation(n)
     n_val = max(1, int(round(n * val_fraction)))
     return np.sort(order[n_val:]), np.sort(order[:n_val])
+
+
+def oversample_goal_episodes(seqs: ZSequences, indices, factor: int) -> np.ndarray:
+    """Gjenta episodene som ender i mål factor ganger. Bare ~10 % av episodene når målet,
+    så modellen ser ellers svært få eksempler på hvordan det ser ut."""
+    indices = np.asarray(indices)
+    if factor <= 1:
+        return indices
+    goal_eps = np.array([i for i in indices if (seqs.episode(i)["events"] == EVENT_GOAL).any()], dtype=np.int64)
+    return np.concatenate([indices] + [goal_eps] * (factor - 1))
 
 
 def event_class_weights(events: np.ndarray, power: float = 0.5) -> torch.Tensor:
@@ -92,6 +105,7 @@ def batch_loss(
     event_weight: float,
     class_weights: torch.Tensor | None = None,
     mse_weight: float = 0.0,
+    position_weight: float = 0.0,
 ) -> dict[str, torch.Tensor]:
     """nll + event_weight * hendelsestap + mse_weight * kvadratfeil for forventet z_{t+1}.
 
@@ -105,20 +119,33 @@ def batch_loss(
     ce = F.cross_entropy(out.event_logits[m], batch.events[m], weight=class_weights)
     expected = (F.softmax(out.logit_pi, dim=-1).unsqueeze(-1) * out.mu).sum(2)
     mse = ((expected - batch.targets) ** 2)[m].mean()
-    return {"loss": nll + event_weight * ce + mse_weight * mse, "nll": nll, "event_ce": ce, "mse": mse}
+    position = position_loss(out, batch) if out.position_logits is not None else torch.zeros(())
+    loss = nll + event_weight * ce + mse_weight * mse + position_weight * position
+    return {"loss": loss, "nll": nll, "event_ce": ce, "mse": mse, "position_ce": position}
+
+
+def position_loss(out, batch: Batch) -> torch.Tensor:
+    """Kryssentropi for agentens og målets celle etter hvert skritt. Ukjente celler (-1) hoppes over."""
+    losses = []
+    for i, cells in enumerate((batch.agent_cell[:, 1:], batch.goal_cell[:, 1:])):
+        ok = batch.mask & (cells >= 0)
+        if ok.any():
+            losses.append(F.cross_entropy(out.position_logits[:, :, i][ok], cells[ok]))
+    return torch.stack(losses).mean() if losses else torch.zeros(())
 
 
 def run_epoch(
-    model, seqs, indices, opt, batch_size, event_weight, rng=None, class_weights=None, mse_weight=0.0
+    model, seqs, indices, opt, batch_size, event_weight, rng=None, class_weights=None, mse_weight=0.0,
+    position_weight=0.0,
 ) -> dict[str, float]:
     training = opt is not None
     model.train(training)
     order = rng.permutation(indices) if training else indices
-    totals, n = {"loss": 0.0, "nll": 0.0, "event_ce": 0.0, "mse": 0.0}, 0
+    totals, n = {"loss": 0.0, "nll": 0.0, "event_ce": 0.0, "mse": 0.0, "position_ce": 0.0}, 0
     with torch.set_grad_enabled(training):
         for start in range(0, len(order), batch_size):
             batch = make_batch(seqs, order[start:start + batch_size])
-            parts = batch_loss(model, batch, training, event_weight, class_weights, mse_weight)
+            parts = batch_loss(model, batch, training, event_weight, class_weights, mse_weight, position_weight)
             if training:
                 opt.zero_grad()
                 parts["loss"].backward()
@@ -144,6 +171,8 @@ def train(
     input_mlp: bool = True,
     direct_path: bool = True,
     mse_weight: float = 10.0,
+    position_weight: float = 0.0,
+    goal_oversample: int = 1,
     init_from: str | Path | None = None,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
@@ -162,18 +191,23 @@ def train(
     else:
         model = MDNRNN(MDNRNNConfig(
             latent_dim=seqs.mu.shape[1], hidden_dim=hidden_dim, num_mixtures=num_mixtures, input_mlp=input_mlp,
-            direct_path=direct_path,
+            direct_path=direct_path, position_head=position_weight > 0,
         ))
     class_weights = event_class_weights(seqs.subset(train_idx).events) if balance_events else None
     if class_weights is not None:
         log(f"Hendelsesvekter (flytt, mål, hindring): {[round(w, 2) for w in class_weights.tolist()]}")
+    epoch_idx = oversample_goal_episodes(seqs, train_idx, goal_oversample)
+    if goal_oversample > 1:
+        log(f"Mål-episoder vises {goal_oversample} ganger per epoke: {len(epoch_idx)} episoder per epoke")
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     history = []
     best_val, best_epoch, best_state = float("inf"), 0, None
     for epoch in range(1, epochs + 1):
         t0 = time.time()
-        tr = run_epoch(model, seqs, train_idx, opt, batch_size, event_weight, rng, class_weights, mse_weight)
-        va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight, None, class_weights, mse_weight)
+        tr = run_epoch(model, seqs, epoch_idx, opt, batch_size, event_weight, rng, class_weights, mse_weight,
+                       position_weight)
+        va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight, None, class_weights, mse_weight,
+                       position_weight)
         history.append({"epoch": epoch, "train": tr, "val": va})
         # Tidlig stopp på dynamikken alene. Hendelseshodet overtilpasser seg tidligere enn resten,
         # og ville ellers stoppet treningen før z-prediksjonen er ferdig lært.
@@ -183,14 +217,16 @@ def train(
             best_state = copy.deepcopy(model.state_dict())
         log(
             f"epoke {epoch:2d}  tren nll {tr['nll']:7.3f} hendelse {tr['event_ce']:.3f}  "
-            f"mse {tr['mse']:.4f}  val nll {va['nll']:7.3f} hendelse {va['event_ce']:.3f} mse {va['mse']:.4f}  "
+            f"mse {tr['mse']:.4f}  val nll {va['nll']:7.3f} hendelse {va['event_ce']:.3f} mse {va['mse']:.4f} "
+            f"posisjon {va['position_ce']:.3f}  "
             f"[{time.time() - t0:.0f}s]"
         )
 
     hparams = {
         "hidden_dim": hidden_dim, "num_mixtures": num_mixtures, "epochs": epochs, "batch_size": batch_size,
         "lr": lr, "event_weight": event_weight, "balance_events": balance_events, "input_mlp": input_mlp,
-        "direct_path": direct_path, "mse_weight": mse_weight, "best_epoch": best_epoch,
+        "direct_path": direct_path, "mse_weight": mse_weight, "position_weight": position_weight,
+        "goal_oversample": goal_oversample, "best_epoch": best_epoch,
         "seed": seed, "data": [str(d) for d in data] if isinstance(data, (list, tuple)) else str(data),
         "init_from": str(init_from) if init_from else None,
     }
@@ -216,13 +252,17 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--linear-input", action="store_true", help="z og handling rett inn i LSTM-en, som i artikkelen")
     p.add_argument("--mse-weight", type=float, default=10.0, help="vekt på kvadratfeil for forventet z")
     p.add_argument("--no-direct-path", action="store_true", help="hodene ser bare h, som i artikkelen")
+    p.add_argument("--position-weight", type=float, default=0.0,
+                   help="vekt på hjelpehodet som lærer minnet hvor agent og mål er (0 = av)")
+    p.add_argument("--goal-oversample", type=int, default=1, help="vis mål-episoder så mange ganger per epoke")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args(argv)
     result = train(
         args.data, args.out, hidden_dim=args.hidden_dim, num_mixtures=args.mixtures, epochs=args.epochs,
         batch_size=args.batch_size, lr=args.lr, event_weight=args.event_weight,
         balance_events=not args.no_balance_events, input_mlp=not args.linear_input,
-        direct_path=not args.no_direct_path, mse_weight=args.mse_weight, init_from=args.init_from, seed=args.seed,
+        direct_path=not args.no_direct_path, mse_weight=args.mse_weight, position_weight=args.position_weight,
+        goal_oversample=args.goal_oversample, init_from=args.init_from, seed=args.seed,
     )
     print(json.dumps(result["history"][-1]))
 
