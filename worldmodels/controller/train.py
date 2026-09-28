@@ -40,6 +40,7 @@ def train(
     temperature: float = 1.0,
     real_check_every: int = 25,
     real_check_episodes: int = 200,
+    init_from: str | Path | None = None,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
 ) -> dict:
@@ -48,13 +49,16 @@ def train(
     gen = torch.Generator().manual_seed(seed)
     vae, _ = ConvVAE.load(vae_path)
     rnn, rnn_ckpt = MDNRNN.load(rnn_path)
-    seqs = ZSequences.load(data)
+    seqs = ZSequences.load_many(data)
     train_idx, _ = split_indices(len(seqs), seed=rnn_ckpt.get("hparams", {}).get("seed", 0))
     starts = make_warm_starts(rnn, seqs, train_idx, context=context)
     log(f"{len(starts)} oppvarmingsstarter fra treningsepisodene")
 
     controller = LinearController(seqs.mu.shape[1], rnn.config.hidden_dim, rnn.config.num_actions)
-    es = EvolutionStrategy(controller.num_params, population=population, sigma=sigma, lr=lr, seed=seed)
+    init = LinearController.load(init_from).params if init_from else None
+    if init is not None:
+        log(f"Fortsetter fra {init_from}")
+    es = EvolutionStrategy(controller.num_params, population=population, sigma=sigma, lr=lr, seed=seed, init=init)
     dream_cfg = DreamConfig(horizon=horizon, temperature=temperature)
     # Fast sett med starter for å måle fremgang i drømmen på samme måte hver gang
     eval_starts = starts.sample(512, np.random.default_rng(seed + 1))
@@ -89,7 +93,7 @@ def train(
     hparams = {
         "generations": generations, "population": population, "starts_per_generation": starts_per_generation,
         "sigma": sigma, "lr": lr, "context": context, "horizon": horizon, "temperature": temperature, "seed": seed,
-        "vae": str(vae_path), "rnn": str(rnn_path),
+        "vae": str(vae_path), "rnn": str(rnn_path), "init_from": str(init_from) if init_from else None,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     controller.save(out, hparams=json.dumps(hparams))
@@ -101,7 +105,7 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Tren controlleren i drømmen")
     p.add_argument("--vae", default="checkpoints/vae_z32_w10.pt")
     p.add_argument("--rnn", default="checkpoints/mdnrnn_direct_k5.pt")
-    p.add_argument("--data", default="data/zseq_20k.npz")
+    p.add_argument("--data", nargs="+", default=["data/zseq_20k.npz"], help="z-sekvenser for oppvarmingsstarter")
     p.add_argument("--out", default="checkpoints/controller.npz")
     p.add_argument("--generations", type=int, default=200)
     p.add_argument("--population", type=int, default=32)
@@ -113,12 +117,13 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--temperature", type=float, default=1.0)
     p.add_argument("--real-check-every", type=int, default=25)
     p.add_argument("--history", default=None, help="lagre treningshistorikk som JSON")
+    p.add_argument("--init-from", default=None, help="start fra vektene i denne controlleren")
     p.add_argument("--seed", type=int, default=0)
     a = p.parse_args(argv)
     result = train(
         a.vae, a.rnn, a.data, a.out, generations=a.generations, population=a.population,
         starts_per_generation=a.starts, sigma=a.sigma, lr=a.lr, context=a.context, horizon=a.horizon,
-        temperature=a.temperature, real_check_every=a.real_check_every, seed=a.seed,
+        temperature=a.temperature, real_check_every=a.real_check_every, init_from=a.init_from, seed=a.seed,
     )
     if a.history:
         Path(a.history).write_text(json.dumps(result, indent=2))

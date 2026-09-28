@@ -90,6 +90,17 @@ class ZSequences:
         with np.load(path) as d:
             return cls(**{k: d[k] for k in ("mu", "logvar", "agent_cell", "actions", "events", "lengths")})
 
+    @classmethod
+    def concat(cls, parts: list["ZSequences"]) -> "ZSequences":
+        return cls(**{k: np.concatenate([getattr(p, k) for p in parts]) for k in cls.__dataclass_fields__})
+
+    @classmethod
+    def load_many(cls, paths) -> "ZSequences":
+        """Last én eller flere filer og slå dem sammen (brukes i iterativ trening)."""
+        if isinstance(paths, (str, Path)):
+            return cls.load(paths)
+        return cls.concat([cls.load(p) for p in paths])
+
 
 @torch.no_grad()
 def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> ZSequences:
