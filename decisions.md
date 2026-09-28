@@ -177,3 +177,51 @@ etter seks skritt med egne prediksjoner. Men den sporer av over tid. I bildet
 oppvarmingsskritt, og drømmene bør være korte (rundt 5–10 skritt). Mål-hendelser forutses bare i
 16 % av tilfellene, så en controller som trenes bare i drømmen vil få svakt signal om målet.
 Det må vi ta stilling til før steg 4.
+
+---
+
+## 2026-09-28 · Steg 4: controller trent i drømmen
+
+### D23. Lineær controller på [z, h], som i artikkelen
+**Hvorfor:** Proben i steg 3 viste at agentens posisjon kan leses lineært fra (z, h) i 84 % av
+tilfellene. Da bør en lineær controller ha det den trenger, og all "forståelse" ligger i V og M.
+Den har 1156 parametre og velger handlingen med høyest verdi.
+
+### D24. Enkel evolusjonsstrategi i stedet for CMA-ES
+**Valg:** Antitetisk støy, rangerte fitnessverdier og Adam (Salimans m.fl. 2017), 32 kandidater
+per generasjon, sigma 0,1. Omtrent 40 linjer og enhetstestet på en kvadratisk funksjon.
+**Hvorfor:** CMA-ES krever en ekstern pakke eller mye kode, og med ~1000 parametre er den enkle
+varianten god nok. En generasjon tar under ett sekund fordi alle kandidatene drømmer i én batch.
+
+### D25. Drømmeoppsett basert på funnene fra steg 3
+- **5 ekte oppvarmingsskritt** fra datasettet før controlleren tar over (D22).
+- **10 drømte skritt**, fordi drømmen sporer av etter 6–8.
+- **Forventet belønning** fra hendelseshodet i stedet for trukne utfall: belønningen i hvert skritt
+  er vektet med sannsynligheten for at episoden fortsatt lever. Mindre støy i fitness.
+- Den ekte sjekken underveis (200 episoder med nye seeds) brukes bare til logging, aldri til å
+  velge vekter.
+
+### D26. Resultat: færre krasj, men ikke flere mål
+Ekte miljø, seeds fra 100 000 og oppover (ingen av dem finnes i treningsdataene):
+
+| Policy | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 11 % | 82 % | 7 % | −0,85 |
+| **Controller trent i drømmen** | 6 % | 38 % | 57 % | −0,62 |
+| Tilfeldig som unngår hindringer (juks, kjenner kartet) | 29 % | 0 % | 72 % | −0,13 |
+| Korteste vei (juks) | 100 % | 0 % | 0 % | +0,95 |
+
+Controlleren har lært *noe* ekte: den krasjer halvparten så ofte som tilfeldig og får bedre
+avkastning. Men den når målet sjeldnere. Den velger "høyre" i ~77 % av skrittene, går inn i
+høyre vegg og blir stående til tiden går ut. Det er trygt både i drømmen og i virkeligheten.
+
+**Drømmen blir lurt:** med temperatur 0 tror drømmen at controlleren når målet i 36 % av
+drømmene, men i virkeligheten skjer det i 7 %. Controlleren utnytter feil i M, akkurat det
+artikkelen advarer mot. Grunnen er at M bare treffer 16 % av mål-hendelsene (D22), så signalet
+for "gå mot målet" er både svakt og upålitelig, mens "unngå hindringer" læres godt.
+
+### D27. Høyere temperatur hjalp ikke
+Artikkelen gjør drømmen mer uforutsigbar (tau 1,15) for å motvirke utnyttelse. Vi prøvde
+tau 0 / 1 / 1,5 / 2,5 og 64 mot 256 starter per generasjon. Alle endte på 5–7 % mål og 30–40 %
+hindring. Problemet er ikke at controlleren utnytter en for forutsigbar drøm, men at drømmen
+ikke vet nok om mål. Rådata: `docs/experiments/controller_runs.json`.
