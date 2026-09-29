@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from worldmodels.controller.features import world_features
 from worldmodels.controller.policy import LinearController
 from worldmodels.data import Episode, save_episode
 from worldmodels.env import GridConfig, GridDodgeEnv
@@ -36,7 +37,8 @@ class WorldModelAgent:
         Minnet oppdateres alltid med handlingen som faktisk ble tatt."""
         z, _ = self.vae.encode(to_tensor(obs))
         h = self.hidden[0][-1]
-        extra = self.rnn.belief_features(h) if self.controller.extra_dim else None
+        c = self.controller
+        extra = world_features(self.rnn, z, self.hidden, c.beliefs, c.lookahead) if c.extra_dim else None
         a = self.controller.act(z, h, extra)
         if epsilon > 0:
             rng = rng if rng is not None else np.random.default_rng()

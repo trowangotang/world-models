@@ -144,6 +144,22 @@ class MDNRNN(nn.Module):
             parts.append(torch.sigmoid(self.obstacle_head(h)))
         return torch.cat(parts, dim=-1)
 
+    @torch.no_grad()
+    def lookahead_obstacle(self, z: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """Fremsyn ett skritt: sannsynligheten for å treffe en hindring for hver handling.
+
+        z: (B, D), hidden: LSTM-tilstanden før skrittet. Kjører modellen én gang per handling
+        (i én batch) uten å endre tilstanden. Returnerer (B, num_actions) (decisions.md D41).
+        """
+        from worldmodels.mdnrnn.encode import EVENT_OBSTACLE
+
+        B, A = z.shape[0], self.config.num_actions
+        zz = z.repeat(A, 1).unsqueeze(1)                                    # (A*B, 1, D)
+        aa = torch.arange(A).repeat_interleave(B).unsqueeze(1)              # (A*B, 1)
+        hh = tuple(x.repeat(1, A, 1) for x in hidden)
+        p = F.softmax(self(zz, aa, hh).event_logits[:, 0], dim=-1)[:, EVENT_OBSTACLE]
+        return p.view(A, B).T
+
     # ------------------------------------------------------------ lagring
     def save(self, path, **extra) -> None:
         torch.save({"config": asdict(self.config), "state_dict": self.state_dict(), **extra}, path)

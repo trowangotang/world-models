@@ -26,6 +26,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
+from worldmodels.controller.features import world_features
 from worldmodels.controller.policy import LinearController
 from worldmodels.env import GridConfig
 from worldmodels.mdnrnn.encode import EVENT_GOAL, EVENT_MOVE, EVENT_OBSTACLE, ZSequences
@@ -117,7 +118,7 @@ def dream_fitness(
     shaped = torch.zeros(P * B)
     for _ in range(config.horizon):
         h = hidden[0][-1]
-        extra = model.belief_features(h) if controller.extra_dim else None
+        extra = world_features(model, z, hidden, controller.beliefs, controller.lookahead)
         logits = controller.batched_logits(
             population, z.view(P, B, D), h.view(P, B, -1), None if extra is None else extra.view(P, B, -1)
         )
