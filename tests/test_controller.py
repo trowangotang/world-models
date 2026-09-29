@@ -267,3 +267,9 @@ def test_cma_normalization_keeps_unit_mean_and_same_direction():
 def test_cma_requires_ask_before_tell():
     with pytest.raises(RuntimeError):
         SepCMAES(3).tell(np.zeros(7))
+
+
+def test_cma_per_parameter_std_controls_initial_spread():
+    es = SepCMAES(4, sigma=1.0, population=4000, seed=0, std=np.array([1.0, 1.0, 0.1, 0.1]))
+    spread = es.ask().std(0)
+    assert np.allclose(spread, [1.0, 1.0, 0.1, 0.1], rtol=0.1)

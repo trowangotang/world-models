@@ -47,6 +47,7 @@ def train(
     charge_remaining: bool = False,
     shaping: float = 0.0,
     optimizer: str = "es",
+    zh_std: float = 1.0,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
 ) -> dict:
@@ -68,7 +69,11 @@ def train(
     if init is not None:
         log(f"Fortsetter fra {init_from}")
     if optimizer == "cma":
-        es = SepCMAES(controller.num_params, sigma=sigma, population=population, seed=seed, init=init, normalize=True)
+        # Vektene for z og h kan starte med mindre spredning enn posisjonstroen og bias (D38)
+        std = np.ones(controller.num_params)
+        std[: (controller.z_dim + controller.h_dim) * controller.num_actions] = zh_std
+        es = SepCMAES(controller.num_params, sigma=sigma, population=population, seed=seed, init=init,
+                      normalize=True, std=std)
     elif optimizer == "es":
         es = EvolutionStrategy(controller.num_params, population=population, sigma=sigma, lr=lr, seed=seed, init=init)
     else:
@@ -112,6 +117,7 @@ def train(
         "sigma": sigma, "lr": lr, "context": context, "horizon": horizon, "temperature": temperature, "seed": seed,
         "vae": str(vae_path), "rnn": str(rnn_path), "init_from": str(init_from) if init_from else None,
         "use_positions": use_positions, "remaining_steps": remaining, "shaping": shaping, "optimizer": optimizer,
+        "zh_std": zh_std,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     controller.save(out, hparams=json.dumps(hparams))
@@ -143,6 +149,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--shaping", type=float, default=0.0,
                    help="belønning per celle nærmere målet i drømmen, ut fra M sin tro (krever posisjonshode)")
     p.add_argument("--optimizer", choices=("es", "cma"), default="es")
+    p.add_argument("--zh-std", type=float, default=1.0,
+                   help="CMA-ES: startspredning for vektene på z og h, relativt til resten")
     p.add_argument("--seed", type=int, default=0)
     a = p.parse_args(argv)
     result = train(
@@ -150,7 +158,7 @@ def main(argv: list[str] | None = None) -> None:
         starts_per_generation=a.starts, sigma=a.sigma, lr=a.lr, context=a.context, horizon=a.horizon,
         temperature=a.temperature, real_check_every=a.real_check_every, init_from=a.init_from,
         use_positions=a.use_positions, charge_remaining=a.charge_remaining,
-        shaping=a.shaping, optimizer=a.optimizer, seed=a.seed,
+        shaping=a.shaping, optimizer=a.optimizer, zh_std=a.zh_std, seed=a.seed,
     )
     if a.history:
         Path(a.history).write_text(json.dumps(result, indent=2))

@@ -25,6 +25,7 @@ class SepCMAES:
         seed: int = 0,
         init: np.ndarray | None = None,
         normalize: bool = False,
+        std: np.ndarray | None = None,
     ):
         n = self.n = num_params
         self.normalize = normalize
@@ -48,7 +49,9 @@ class SepCMAES:
         self.c1, self.cmu = min(c1 * scale, 0.5), min(cmu * scale, 0.5)
         self.chi_n = np.sqrt(n) * (1 - 1 / (4 * n) + 1 / (21 * n ** 2))
 
-        self.var = np.ones(n)   # diagonalen i C
+        # Diagonalen i C. Med std kan noen parametre starte med mindre spredning enn andre,
+        # f.eks. når vi vet at noen få inndata er viktigere enn resten.
+        self.var = np.ones(n) if std is None else np.broadcast_to(np.asarray(std, float) ** 2, (n,)).copy()
         self.ps = np.zeros(n)
         self.pc = np.zeros(n)
         self.generation = 0
