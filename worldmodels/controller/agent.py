@@ -36,7 +36,7 @@ class WorldModelAgent:
         Minnet oppdateres alltid med handlingen som faktisk ble tatt."""
         z, _ = self.vae.encode(to_tensor(obs))
         h = self.hidden[0][-1]
-        extra = self.rnn.position_features(h) if self.controller.extra_dim else None
+        extra = self.rnn.belief_features(h) if self.controller.extra_dim else None
         a = self.controller.act(z, h, extra)
         if epsilon > 0:
             rng = rng if rng is not None else np.random.default_rng()

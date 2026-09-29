@@ -36,6 +36,7 @@ class MDNRNNConfig:
     direct_path: bool = True
     position_head: bool = False
     grid_cells: int = 64
+    obstacle_head: bool = False
 
 
 @dataclass
@@ -47,6 +48,7 @@ class MDNOutput:
     hidden: tuple[torch.Tensor, torch.Tensor]
     h: torch.Tensor          # (B, T, H) skjult tilstand etter hvert skritt
     position_logits: torch.Tensor | None = None  # (B, T, 2, celler): agent og mål etter skrittet
+    obstacle_logits: torch.Tensor | None = None  # (B, T, 4): hindring over/under/venstre/høyre etter skrittet
 
 
 class MDNRNN(nn.Module):
@@ -80,6 +82,9 @@ class MDNRNN(nn.Module):
         # posisjonene blir lineært lesbare fra minnet, som er det den lineære controlleren ser.
         # Brukes bare som ekstra tap under trening (decisions.md D31).
         self.position_head = nn.Linear(c.hidden_dim, 2 * c.grid_cells) if c.position_head else None
+        # Hjelpehode nr. 2: står det en hindring i nabocellen i hver retning? Også lineært fra h,
+        # av samme grunn (decisions.md D40).
+        self.obstacle_head = nn.Linear(c.hidden_dim, c.num_actions) if c.obstacle_head else None
 
     def forward(
         self, z: torch.Tensor, actions: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor] | None = None
@@ -103,6 +108,7 @@ class MDNRNN(nn.Module):
             position_logits=(
                 self.position_head(h).view(B, T, 2, c.grid_cells) if self.position_head is not None else None
             ),
+            obstacle_logits=self.obstacle_head(h) if self.obstacle_head is not None else None,
         )
 
     @property
@@ -125,6 +131,18 @@ class MDNRNN(nn.Module):
         rows = (probs.view(*probs.shape[:-1], side, side).sum(-1) * coords).sum(-1)  # (..., 2)
         cols = (probs.view(*probs.shape[:-1], side, side).sum(-2) * coords).sum(-1)
         return torch.stack([rows[..., 0], cols[..., 0], rows[..., 1], cols[..., 1]], dim=-1)
+
+    @property
+    def num_belief_features(self) -> int:
+        return self.num_position_features + (self.config.num_actions if self.obstacle_head is not None else 0)
+
+    def belief_features(self, h: torch.Tensor) -> torch.Tensor:
+        """Alt M tror om verden som controlleren kan få: posisjonene (4 tall) og, med
+        hindringshode, sannsynligheten for hindring i hver retning (4 tall i [0, 1])."""
+        parts = [self.position_features(h)]
+        if self.obstacle_head is not None:
+            parts.append(torch.sigmoid(self.obstacle_head(h)))
+        return torch.cat(parts, dim=-1)
 
     # ------------------------------------------------------------ lagring
     def save(self, path, **extra) -> None:

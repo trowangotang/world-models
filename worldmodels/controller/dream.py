@@ -117,7 +117,7 @@ def dream_fitness(
     shaped = torch.zeros(P * B)
     for _ in range(config.horizon):
         h = hidden[0][-1]
-        extra = model.position_features(h) if controller.extra_dim else None
+        extra = model.belief_features(h) if controller.extra_dim else None
         logits = controller.batched_logits(
             population, z.view(P, B, D), h.view(P, B, -1), None if extra is None else extra.view(P, B, -1)
         )

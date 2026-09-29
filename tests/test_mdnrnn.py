@@ -233,3 +233,55 @@ def test_oversampling_repeats_only_goal_episodes(seqs):
     assert len(out) == len(idx) + 2 * len(goal)
     assert set(out[len(idx):]) == goal
     assert np.array_equal(oversample_goal_episodes(seqs, idx, 1), idx)
+
+
+def test_near_obstacles_marks_neighbours_and_ignores_walls():
+    from worldmodels.mdnrnn.encode import near_obstacles
+
+    grid = np.zeros((8, 8), bool)
+    grid[2, 3] = True   # over (3, 3)
+    grid[3, 4] = True   # til høyre for (3, 3)
+    out = near_obstacles(grid, np.array([3 * 8 + 3, 0, -1]))
+    assert out[0].tolist() == [1, 0, 0, 1]      # opp, ned, venstre, høyre
+    assert out[1].tolist() == [0, 0, 0, 0]      # hjørnet: kantene er ikke hindringer
+    assert out[2].tolist() == [-1, -1, -1, -1]
+
+
+def test_encoded_near_obstacles_match_environment(seqs):
+    assert seqs.near_obstacle.shape == (len(seqs.mu), 4)
+    assert set(np.unique(seqs.near_obstacle)) <= {0, 1}
+    # En hindrings-hendelse betyr at agenten gikk inn i en hindring i den retningen
+    for i in range(len(seqs)):
+        e = seqs.episode(i)
+        for t in np.flatnonzero(e["events"] == EVENT_OBSTACLE):
+            assert e["near_obstacle"][t, e["actions"][t]] == 1
+
+
+def test_obstacle_head_loss_is_learnable(seqs):
+    torch.manual_seed(0)
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=16, num_mixtures=2, obstacle_head=True))
+    batch = make_batch(seqs, range(len(seqs)))
+    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+    first = None
+    for _ in range(60):
+        parts = batch_loss(model, batch, False, 1.0, obstacle_weight=1.0)
+        first = first if first is not None else parts["obstacle_bce"].item()
+        opt.zero_grad()
+        parts["loss"].backward()
+        opt.step()
+    assert parts["obstacle_bce"].item() < 0.8 * first
+
+
+def test_training_can_add_heads_to_existing_checkpoint(seqs, tmp_path):
+    from worldmodels.mdnrnn.train import train
+
+    base = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, position_head=True))
+    base.save(tmp_path / "base.pt")
+    seqs.save(tmp_path / "z.npz")
+    train(tmp_path / "z.npz", tmp_path / "out.pt", epochs=1, init_from=tmp_path / "base.pt",
+          position_weight=1.0, obstacle_weight=1.0, log=lambda m: None)
+    model, _ = MDNRNN.load(tmp_path / "out.pt")
+    assert model.config.obstacle_head and model.config.position_head
+    assert model.num_belief_features == 8
+    f = model.belief_features(torch.randn(3, 8))
+    assert f.shape == (3, 8) and (f[:, 4:] >= 0).all() and (f[:, 4:] <= 1).all()

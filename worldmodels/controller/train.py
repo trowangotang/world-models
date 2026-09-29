@@ -61,7 +61,7 @@ def train(
     starts = make_warm_starts(rnn, seqs, train_idx, context=context)
     log(f"{len(starts)} oppvarmingsstarter fra treningsepisodene")
 
-    extra_dim = rnn.num_position_features if use_positions else 0
+    extra_dim = rnn.num_belief_features if use_positions else 0
     if use_positions and not extra_dim:
         raise ValueError("use_positions krever en MDN-RNN med posisjonshode")
     controller = LinearController(seqs.mu.shape[1], rnn.config.hidden_dim, rnn.config.num_actions, extra_dim)

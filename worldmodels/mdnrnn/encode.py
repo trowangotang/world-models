@@ -10,6 +10,8 @@ Filen inneholder episodene etter hverandre ("flatet ut"):
     mu, logvar     (sum(T_i + 1), D)  z-fordelingen for hver observasjon
     agent_cell     (sum(T_i + 1),)    agentens celle i originalbildet (for evaluering)
     goal_cell      (sum(T_i + 1),)    målets celle (fast gjennom episoden, -1 i eldre filer)
+    near_obstacle  (sum(T_i + 1), 4)  hindring i nabocellen over/under/venstre/høyre for agenten
+                                      (1 = ja, 0 = nei eller kant, -1 = ukjent/eldre filer)
     actions        (sum(T_i),)
     events         (sum(T_i),)        EVENT_MOVE / EVENT_GOAL / EVENT_OBSTACLE
     lengths        (N,)               T_i, antall skritt i episode i
@@ -25,7 +27,8 @@ import numpy as np
 import torch
 
 from worldmodels.data import Episode, episode_paths, load_episode
-from worldmodels.env.parse import AGENT, GOAL, find_cell, parse_cells
+from worldmodels.env.gridworld import ACTIONS
+from worldmodels.env.parse import AGENT, GOAL, OBSTACLE, find_cell, parse_cells
 from worldmodels.vae.dataset import iterate_minibatches
 from worldmodels.vae.model import ConvVAE
 
@@ -44,7 +47,7 @@ def episode_events(ep: Episode) -> np.ndarray:
     return events
 
 
-PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "actions", "events")
+PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "near_obstacle", "actions", "events")
 
 
 @dataclass
@@ -56,6 +59,7 @@ class ZSequences:
     events: np.ndarray
     lengths: np.ndarray
     goal_cell: np.ndarray
+    near_obstacle: np.ndarray
 
     def __len__(self) -> int:
         return len(self.lengths)
@@ -77,6 +81,7 @@ class ZSequences:
             "logvar": self.logvar[o:o + T + 1],
             "agent_cell": self.agent_cell[o:o + T + 1],
             "goal_cell": self.goal_cell[o:o + T + 1],
+            "near_obstacle": self.near_obstacle[o:o + T + 1],
             "actions": self.actions[s:s + T],
             "events": self.events[s:s + T],
         }
@@ -97,6 +102,7 @@ class ZSequences:
             fields = {k: d[k] for k in d.files}
         # Filer kodet før målets celle ble lagret: ukjent overalt
         fields.setdefault("goal_cell", np.full(len(fields["agent_cell"]), -1, dtype=np.int64))
+        fields.setdefault("near_obstacle", np.full((len(fields["agent_cell"]), len(ACTIONS)), -1, dtype=np.int8))
         return cls(**fields)
 
     @classmethod
@@ -109,6 +115,24 @@ class ZSequences:
         if isinstance(paths, (str, Path)):
             return cls.load(paths)
         return cls.concat([cls.load(p) for p in paths])
+
+
+def near_obstacles(obstacle_map: np.ndarray, agent_cells: np.ndarray) -> np.ndarray:
+    """(G, G) bool-kart og (N,) agentceller -> (N, 4) int8: hindring i nabocellen i hver retning.
+
+    Kanten teller ikke som hindring (agenten blir bare stående). Ukjent agentcelle gir -1.
+    """
+    G = obstacle_map.shape[0]
+    out = np.full((len(agent_cells), len(ACTIONS)), -1, dtype=np.int8)
+    known = agent_cells >= 0
+    r, c = agent_cells[known] // G, agent_cells[known] % G
+    for k, (dr, dc) in enumerate(ACTIONS):
+        nr, nc = r + dr, c + dc
+        inside = (nr >= 0) & (nr < G) & (nc >= 0) & (nc < G)
+        hit = np.zeros(len(r), dtype=bool)
+        hit[inside] = obstacle_map[nr[inside], nc[inside]]
+        out[known, k] = hit
+    return out
 
 
 @torch.no_grad()
@@ -129,6 +153,8 @@ def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> Z
         parts["agent_cell"].append(find_cell(cells, AGENT))
         # Målet flytter seg aldri, men skjules når agenten står på det. Bruk første bilde.
         parts["goal_cell"].append(np.full(len(ep.obs), find_cell(cells[:1], GOAL)[0], dtype=np.int64))
+        # Hindringene flytter seg heller ikke; første bilde viser alle.
+        parts["near_obstacle"].append(near_obstacles(cells[0] == OBSTACLE, parts["agent_cell"][-1]))
         parts["actions"].append(ep.actions)
         parts["events"].append(episode_events(ep))
         lengths.append(len(ep))
