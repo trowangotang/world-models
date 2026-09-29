@@ -409,3 +409,43 @@ Ekte miljø, 1000 episoder:
   episodene. Informasjonen om hindringer ligger i z og h, men søket har ikke lært å bruke den.
 
 Rådata: `docs/experiments/search.json`, skript i `docs/experiments/scripts/`.
+
+## Steg 4e: unngå hindringer
+
+### D40. Hjelpehode for hindringer lærte lite
+Martin valgte å lære controlleren å unngå hindringer. Første forsøk fulgte oppskriften fra målet
+(D32): z-sekvensene fikk en merkelapp for om det står en hindring i hver nabocelle
+(`near_obstacle`), og M fikk et lineært hode fra h som skal forutsi den (`--obstacle-weight`).
+M ble trent videre fra `mdnrnn_pos` i 10 epoker.
+
+Hodet lærte lite: AUC 0,76, og det sier aldri over 50 % (bare 4,7 % av nabocellene er hindringer).
+Minnet holder ikke oversikt over hindringene, akkurat som det ikke gjorde med målet før D32.
+Hodet er beholdt i koden som valgfritt, men brukes ikke videre.
+
+### D41. Fremsyn: M spør seg selv "hva skjer om jeg går hit?"
+M *vet* likevel mye om hindringer: hendelseshodet forutså to av tre krasj allerede i steg 4c.
+Det trenger bare å få vite hvilken handling det gjelder. Så for hver av de fire handlingene
+kjører vi M ett skritt frem, uten å endre minnet, og leser av sannsynligheten for krasj
+(`MDNRNN.lookahead_obstacle`, `--lookahead`). Det er 4 tall til controlleren.
+
+Fremsynet skiller hindring fra ikke-hindring mye bedre enn hodet: AUC 0,94, og med grense 50 %
+fanger det 67 % av hindringene med 6 % falske alarmer. Controlleren er fortsatt lineær, nå på
+posisjonstro (4) + fremsyn (4) + bias: 36 parametre.
+
+### D42. Resultat: færre krasj, men agenten pendler
+Ekte miljø, 1000 episoder. Samme oppsett som D39 (CMA-ES, formet belønning, `--zh-std 0`):
+
+| Controller | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 11 % | 82 % | 7 % | −0,85 |
+| Steg 4d: posisjonstro (20 parametre) | 41 % | 55 % | 4 % | −0,22 |
+| **Posisjonstro + fremsyn (36 parametre)** | **38 %** | **34 %** | **29 %** | **−0,18** |
+| Som over, z/h-spredning 0,03 | 35 % | 33 % | 32 % | −0,20 |
+
+- **Krasjene falt fra 55 % til 34 %**, og avkastningen er den beste så langt.
+- **Men nå blir 29 % av episodene avkortet.** Av 88 avkortede episoder (av 300) pendlet agenten
+  mellom 2–3 celler i 51: den går til side for en hindring, og så rett tilbake mot målet. En
+  lineær controller som bare ser nåtiden, har ingen måte å huske at den nettopp var der.
+- Å gi controlleren også z og h (spredning 0,03) hjalp ikke.
+
+Rådata: `docs/experiments/obstacles.json`.
