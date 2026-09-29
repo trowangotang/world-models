@@ -4,6 +4,7 @@ import torch
 
 from worldmodels.controller.agent import WorldModelAgent, collect_agent_rollouts, play_episodes, run_real_episodes
 from worldmodels.controller.dream import DreamConfig, dream_fitness, make_warm_starts
+from worldmodels.controller.cma import SepCMAES
 from worldmodels.controller.es import EvolutionStrategy, centered_ranks
 from worldmodels.controller.policy import LinearController
 from worldmodels.data import collect_rollouts, episode_paths, load_episode
@@ -211,3 +212,58 @@ def test_remaining_steps_charges_only_survivors(world):
     charged = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0, remaining_steps=10))
     expected = base["fitness"] + base["p_alive_end"] * 10 * DreamConfig.reward_step
     assert np.allclose(charged, expected, atol=1e-5)
+
+
+def test_shaping_is_zero_without_position_head_and_rewards_approach(world):
+    from worldmodels.controller.dream import goal_distance
+
+    _, rnn, seqs = world
+    c = LinearController(4, 8)
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
+    pop = np.zeros((1, c.num_params))
+    plain = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0))
+    shaped = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0, shaping=1.0))
+    assert np.allclose(plain, shaped)
+
+    pos = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, position_head=True)).eval()
+    h = torch.randn(5, 8)
+    d = goal_distance(pos, h)
+    assert d.shape == (5,) and (d >= 0).all() and (d <= 14 + 1e-5).all()
+    starts = make_warm_starts(pos, seqs, range(len(seqs)), context=2)
+    details = dream_fitness(c, pop, pos, starts, DreamConfig(horizon=3, temperature=0.0, shaping=1.0),
+                            return_details=True)
+    base = dream_fitness(c, pop, pos, starts, DreamConfig(horizon=3, temperature=0.0))
+    assert np.allclose(details["fitness"], base + details["shaping"], atol=1e-5)
+
+
+def test_cma_minimizes_shifted_sphere_and_ill_conditioned_ellipsoid():
+    target = np.linspace(-1, 1, 10)
+    es = SepCMAES(10, sigma=1.0, seed=0)
+    for _ in range(200):
+        x = es.ask()
+        es.tell(-((x - target) ** 2).sum(1))
+    assert np.abs(es.theta - target).max() < 1e-3
+    scale = 10 ** np.linspace(0, 3, 10)
+    es = SepCMAES(10, sigma=1.0, seed=1, init=np.ones(10))
+    for _ in range(600):
+        x = es.ask()
+        es.tell(-((scale * x) ** 2).sum(1))
+    assert ((scale * es.theta) ** 2).sum() < 1e-6
+
+
+def test_cma_normalization_keeps_unit_mean_and_same_direction():
+    def f(x):  # skalainvariant, som argmax-controlleren
+        return (x / np.linalg.norm(x, axis=1, keepdims=True)) @ np.ones(6)
+
+    a = SepCMAES(6, sigma=0.3, seed=3, init=np.ones(6) * 2.0)
+    b = SepCMAES(6, sigma=0.3, seed=3, init=np.ones(6) * 2.0, normalize=True)
+    for _ in range(20):
+        a.tell(f(a.ask()))
+        b.tell(f(b.ask()))
+    assert np.linalg.norm(b.theta) == pytest.approx(1.0)
+    assert np.allclose(a.theta / np.linalg.norm(a.theta), b.theta, atol=1e-6)
+
+
+def test_cma_requires_ask_before_tell():
+    with pytest.raises(RuntimeError):
+        SepCMAES(3).tell(np.zeros(7))

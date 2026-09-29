@@ -12,6 +12,8 @@ Controlleren trenes her i stedet for i det ekte miljøet. Oppsettet følger funn
     at episoden fortsatt lever. Det gir mye mindre støy i fitness enn å trekke utfall.
   * **Resten av episoden.** Med `remaining_steps` betaler en agent som overlever drømmen for
     skrittene som ville gjenstått i en ekte episode. Ellers er det nesten gratis å gjemme seg.
+  * **Formet belønning.** Med `shaping` gir drømmen litt belønning for hver celle agenten
+    kommer nærmere målet, ut fra M sin egen tro om posisjonene.
   * **Temperatur.** Neste z trekkes fra blandingen med temperatur tau. Litt støy gjør det
     vanskeligere for controlleren å utnytte feil i drømmen (et poeng fra artikkelen).
 """
@@ -62,6 +64,13 @@ def make_warm_starts(model: MDNRNN, seqs: ZSequences, indices, context: int = 5,
     return WarmStarts(torch.cat(zs), torch.cat(hs, dim=1), torch.cat(cs, dim=1), keep)
 
 
+def goal_distance(model: MDNRNN, h: torch.Tensor) -> torch.Tensor:
+    """Manhattan-avstand i celler mellom der M tror agenten og målet er. (B, H) -> (B,)"""
+    f = model.position_features(h)                       # [-1, 1], 8 celler per akse
+    cells_per_unit = (model.config.grid_cells ** 0.5 - 1) / 2
+    return ((f[:, 0] - f[:, 2]).abs() + (f[:, 1] - f[:, 3]).abs()) * cells_per_unit
+
+
 @dataclass(frozen=True)
 class DreamConfig:
     horizon: int = 10
@@ -73,6 +82,10 @@ class DreamConfig:
     # betaler den skrittkostnaden for dem også, fordi det å vente ut tiden ikke er gratis i
     # virkeligheten (decisions.md D33). 0 = gammel oppførsel.
     remaining_steps: int = 0
+    # Formet belønning: så mye per celle agenten kommer nærmere målet, målt med M sin egen tro
+    # om posisjonene (krever posisjonshode). Potensialbasert, så den endrer ikke hvilken
+    # politikk som er best (Ng m.fl. 1999), men gir søket en bakke å klatre (decisions.md D37).
+    shaping: float = 0.0
 
 
 @torch.no_grad()
@@ -100,6 +113,8 @@ def dream_fitness(
     p_goal_sum = torch.zeros(P * B)
     p_obstacle_sum = torch.zeros(P * B)
     action_counts = torch.zeros(controller.num_actions)
+    use_shaping = config.shaping > 0 and model.num_position_features > 0
+    shaped = torch.zeros(P * B)
     for _ in range(config.horizon):
         h = hidden[0][-1]
         extra = model.position_features(h) if controller.extra_dim else None
@@ -117,13 +132,16 @@ def dream_fitness(
             + p[:, EVENT_OBSTACLE] * config.reward_obstacle
         )
         total += alive * expected
+        if use_shaping:
+            gain = goal_distance(model, h) - goal_distance(model, hidden[0][-1])
+            shaped += alive * config.shaping * gain
         p_goal_sum += alive * p[:, EVENT_GOAL]
         p_obstacle_sum += alive * p[:, EVENT_OBSTACLE]
         alive = alive * p[:, EVENT_MOVE]
         nxt = sample_next(out, config.temperature, generator) if config.temperature > 0 else most_likely_mean(out)
         z = nxt[:, 0]
     total += alive * config.remaining_steps * config.reward_step
-    fitness = total.view(P, B).mean(1).numpy()
+    fitness = (total + shaped).view(P, B).mean(1).numpy()
     if not return_details:
         return fitness
     return {
@@ -131,5 +149,6 @@ def dream_fitness(
         "p_goal": p_goal_sum.view(P, B).mean(1).numpy(),
         "p_obstacle": p_obstacle_sum.view(P, B).mean(1).numpy(),
         "p_alive_end": alive.view(P, B).mean(1).numpy(),
+        "shaping": shaped.view(P, B).mean(1).numpy(),
         "action_share": (action_counts / action_counts.sum()).numpy(),
     }
