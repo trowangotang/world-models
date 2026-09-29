@@ -342,3 +342,70 @@ Evolusjonsstrategien finner likevel ikke "gå mot målet" selv:
 - En læreplan der halvparten av drømmene starter nær målet (høyst 3 skritt unna) hjelper litt:
   målraten stiger jevnt til 10 %, men den krasjer mer. Skriptene ligger i
   `docs/experiments/scripts/`, rådata i `docs/experiments/goal_aware.json`.
+
+## Steg 4d: bedre søk
+
+### D36. CMA-ES, og hvorfor søket alene ikke holdt
+Martin valgte å forbedre søket. Vi la til **sep-CMA-ES** (`worldmodels/controller/cma.py`): CMA-ES
+med diagonal kovarians, som skalerer til ~1200 parametre. Den er testet på standard testfunksjoner.
+
+Fordi controlleren velger argmax, endres ikke fitness om alle vektene skaleres. Uten grep vokser
+både middelverdi og sigma uten grense. Med `normalize=True` holdes middelverdien på lengde 1 og
+sigma skaleres likt. Det endrer ikke søket, men gjør sigma lesbar.
+
+Så prøvde vi søket på bare de 20 parametrene som betyr noe for "gå mot målet" (posisjonstroen og
+bias), der løsningen fantes:
+
+| Søk (20 parametre, drømmen fra D34) | Fitness i drømmen |
+|---|---:|
+| Håndlaget "gå mot målet" | −0,30 |
+| Alltid "opp" (alle vekter 0) | −0,48 |
+| Beste av 2000 tilfeldige controllere | −0,42 |
+| ES / CMA-ES / 1024 drømmer per kandidat | −0,46 |
+| Omstarter med populasjon 16, 32, 64, 128 (IPOP) | −0,47 til −0,48 |
+
+Ingen metode fant den. Grunnen er landskapet: rundt den håndlagde løsningen er fitness god
+bare innenfor en liten kjegle (84 % av punktene er gode med 25 % støy, 17 % med 50 %). Utenfor er
+landskapet flatt rundt −0,47. Det finnes ingen bakke å klatre, uansett søkemetode.
+
+### D37. Formet belønning fra M sin egen tro
+Løsningen var å gi søket en bakke. Drømmen gir nå litt belønning (`--shaping 0.05`) for hver
+celle agenten kommer nærmere målet, målt med M sin *egen* tro om posisjonene. Den bruker ikke
+noe fra det ekte miljøet.
+
+Belønningen er **potensialbasert** (Ng m.fl. 1999): den er forskjellen i avstand før og etter
+skrittet. Summen over en episode avhenger bare av start og slutt, så den endrer ikke hvilken
+politikk som er best, bare hvor lett den er å finne.
+
+Med den fant CMA-ES "gå mot målet" fra null på de 20 parametrene (−0,24 i ekte miljø).
+
+### D38. Liten startspredning på z og h
+På hele controlleren (1172 parametre) gikk det tregt: 16 % mål etter 300 generasjoner. De 1152
+vektene på z og h er for det meste støy for søket og drukner de 20 som betyr noe.
+
+CMA-ES lar hver parameter ha sin egen startspredning (`--zh-std`). Med 0,03 for z og h og 1 for
+resten finner den retningen først og kan så bruke z og h der det lønner seg. Med `--zh-std 0`
+står z- og h-vektene stille på 0, og controlleren bruker bare posisjonstroen.
+
+### D39. Resultat
+Ekte miljø, 1000 episoder:
+
+| Controller | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 11 % | 82 % | 7 % | −0,85 |
+| Steg 4 (ES, [z, h]) | 8 % | 35 % | 57 % | −0,57 |
+| Steg 4c (ES, posisjonstro, læreplan) | 10 % | 44 % | 46 % | −0,61 |
+| ES + formet belønning | 17 % | 54 % | 29 % | −0,58 |
+| CMA-ES + formet belønning | 16 % | 57 % | 28 % | −0,61 |
+| CMA-ES + formet, z/h-spredning 0,1 | 35 % | 55 % | 10 % | −0,31 |
+| CMA-ES + formet, z/h-spredning 0,03 | 40 % | 55 % | 6 % | −0,25 |
+| **CMA-ES + formet, bare posisjonstro (20 parametre)** | **41 %** | **55 %** | **4 %** | **−0,22** |
+| *Håndlaget "gå mot målet" (diagnostikk)* | *40 %* | *56 %* | *4 %* | *−0,24* |
+
+- **Den formede belønningen er det som gjør forskjellen.** Uten den ender alle søk ved veggen.
+- **CMA-ES med liten spredning på z og h** trengs for å finne løsningen i hele controlleren.
+- **Den lærte controlleren slår den håndlagde**, og den beste bruker bare 20 parametre.
+- **Hindringer er neste svakhet.** Alle går rett mot målet og krasjer i over halvparten av
+  episodene. Informasjonen om hindringer ligger i z og h, men søket har ikke lært å bruke den.
+
+Rådata: `docs/experiments/search.json`, skript i `docs/experiments/scripts/`.

@@ -31,6 +31,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 4. Controller trent i drømmen | `worldmodels/controller` | ⚠️ virker, men når sjelden målet |
 | 4b. Iterativ trening | `worldmodels/controller/iterate.py` | ⚠️ fjerner utnyttelsen av drømmen, ikke flere mål |
 | 4c. Mål-bevisst drøm | `worldmodels/mdnrnn`, `worldmodels/controller` | ⚠️ drømmen kjenner igjen målet, men søket finner det ikke |
+| 4d. Bedre søk | `worldmodels/controller/cma.py` | ✅ når målet i 41 %, men krasjer i 55 % |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ⏳ ikke påbegynt |
 
 ## Miljøet: GridDodge
@@ -142,6 +143,15 @@ python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data da
     --use-positions --charge-remaining --temperature 0 --generations 300 --starts 256
 ```
 
+### Steg 4d: bedre søk
+
+```bash
+# CMA-ES med formet belønning. --zh-std 0 gir controlleren med bare posisjonstroen (20 parametre).
+python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data data/v2/zseq_*.npz \
+    --use-positions --charge-remaining --temperature 0 --shaping 0.05 \
+    --optimizer cma --sigma 0.5 --zh-std 0.03 --generations 300 --starts 256   # ~20 min
+```
+
 ## Resultater fra steg 2
 
 ![Rekonstruksjoner](docs/experiments/vae_20k_recon.png)
@@ -247,6 +257,24 @@ Vi lærte MDN-RNN-en å holde orden på hvor agenten og målet er, ga controller
 - **Men søket finner den ikke.** Evolusjonsstrategien havner i "vent ved veggen" fra null, selv
   med 20 parametre og mer støy. Startet i den håndlagde løsningen blir den der. Se D31–D35.
 
+## Resultater fra steg 4d
+
+| Controller (ekte miljø, 1000 episoder) | Mål | Hindring | Avkastning |
+|---|---:|---:|---:|
+| Tilfeldig | 11 % | 82 % | −0,85 |
+| Steg 4 | 8 % | 35 % | −0,57 |
+| CMA-ES + formet belønning, z/h-spredning 0,03 | 40 % | 55 % | −0,25 |
+| **CMA-ES + formet belønning, bare posisjonstro (20 parametre)** | **41 %** | **55 %** | **−0,22** |
+
+- **Bedre søk alene var ikke nok.** CMA-ES, omstarter og flere drømmer per kandidat endte alle
+  ved veggen. "Gå mot målet" er en smal topp i et flatt landskap, så ingen søkemetode fikk signal.
+- **Formet belønning fra M sin egen tro ga søket en bakke.** Drømmen gir litt belønning per celle
+  nærmere målet, ut fra der M *tror* agenten og målet er. Den er potensialbasert, så den endrer
+  ikke hva som er best.
+- **Den lærte controlleren slår den håndlagde**, og den beste bruker bare 20 parametre.
+- **Neste svakhet er hindringer:** den går rett mot målet og krasjer i over halvparten av
+  episodene. Se D36–D39.
+
 ## Prosjektstruktur
 
 ```
@@ -255,7 +283,7 @@ worldmodels/
   data/         tilfeldig policy og innsamling/lagring av rollouts
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
   mdnrnn/       koding til z-sekvenser, MDN-RNN, trening og evaluering
-  controller/   lineær controller, evolusjonsstrategi, drømmemiljø, kjøring i ekte miljø og iterativ trening
+  controller/   lineær controller, ES og CMA-ES, drømmemiljø, kjøring i ekte miljø og iterativ trening
 tests/          enhetstester (pytest)
 docs/           bilder til README, resultater og diagnoseskript fra eksperimenter
 decisions.md    logg over valg og begrunnelser

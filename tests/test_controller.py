@@ -273,3 +273,11 @@ def test_cma_per_parameter_std_controls_initial_spread():
     es = SepCMAES(4, sigma=1.0, population=4000, seed=0, std=np.array([1.0, 1.0, 0.1, 0.1]))
     spread = es.ask().std(0)
     assert np.allclose(spread, [1.0, 1.0, 0.1, 0.1], rtol=0.1)
+
+
+def test_cma_zero_std_freezes_parameters():
+    es = SepCMAES(5, sigma=0.5, seed=0, std=np.array([0.0, 0.0, 1.0, 1.0, 1.0]))
+    for _ in range(30):
+        x = es.ask()
+        es.tell(-((x - 3.0) ** 2).sum(1))
+    assert np.allclose(es.theta[:2], 0.0)
