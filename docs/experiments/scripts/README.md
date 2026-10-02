@@ -12,3 +12,11 @@ checkpointene og dataene fra steg 4b og 4c (se README og decisions.md D31–D35)
 | `dream_rewards_hiding.py` | Hvordan drømmen rangerer "gå mot målet" mot "vent" for ulike oppsett (D34) |
 | `curriculum.py` | Controller med læreplan: halvparten av drømmene starter nær målet (D35) |
 | `final_eval_4c.py` | Sluttabellen i README |
+
+## Steg 4d
+
+| Skript | Hva det viser |
+|---|---|
+| `search_landscape.py` | Fitness for 2000 tilfeldige controllere på de 20 posisjonsparametrene (D36) |
+| `search_basin.py` | Hvor bred toppen rundt "gå mot målet" er (D36) |
+| `final_eval_4d.py` | Sluttabellen for steg 4d |
