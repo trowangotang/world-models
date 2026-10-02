@@ -599,3 +599,96 @@ og 5 % skjer. Drømmen er fortsatt litt forsiktig, men rangerer riktig.
 - **Lange avstander:** 86 % mål når målet er 1–3 skritt unna, 62 % ved 8 eller flere.
 - **Øyet mister agenten over tid:** agenten ses riktig i 92 % av de første skrittene, men 67 % etter
   10 skritt. De lange episodene er der agenten står inntil hindringer, som VAE-en tegner utydelig.
+
+## Steg 8: slutt på pendlingen
+
+Martin: "prøv å fiks problemet med at agenten går frem og tilbake ved en hindring".
+
+### D56. Pendlingen har to årsaker: øyet mister agenten, og C husker ingenting
+Vi kjørte steg 7-agenten på 1000 brett (`docs/experiments/scripts/oscillation.py`). 154 episoder
+pendlet. I de siste 20 skrittene av dem så øyet agenten i riktig celle bare 58 % av gangene, mot
+92 % i de andre episodene. Målet ble sett riktig i 78 % (93 %), og fremsynet stemte i 78 % (93 %).
+
+Typiske tilfeller:
+- **Øyet forveksler agenten med målet.** Agenten står i (3, 2), målet i (3, 1). Øyet ser agenten i
+  (3, 1), altså oppå målet. Controlleren tror den er fremme og går til høyre. I (3, 3) ser øyet
+  riktig igjen og går til venstre. Slik fortsetter det. VAE-en tegner to ruter som står inntil
+  hverandre utydelig, og øyet leser hvert bilde for seg.
+- **Rett inn i veggen.** Agenten står i (2, 7) med målet rett over. Øyet ser riktig, men den lineære
+  controlleren gir "høyre" litt høyere skår enn "opp" og går inn i veggen. Den blir stående, ser
+  det samme bildet igjen og gjør det samme i 50 skritt. Controlleren har ingen måte å merke at den
+  står fast.
+
+Juks-grunnlinjen som går mot målet og unngår hindringer, kommer seg løs fordi den velger tilfeldig
+mellom like gode handlinger. Vi prøvde det samme på steg 7 (trekke handlingen fra softmax av
+skårene): pendlingen forsvinner, men krasjene øker til 17–26 %. Tilfeldighet skjuler problemet
+i stedet for å løse det.
+
+### D57. Sporing: et Bayes-filter for agenten og et minne om hvor den har vært
+Vår egen løsning, ikke fra artikkelen (`worldmodels/mdnrnn/tracker.py`). Agenten vet hvilken handling
+den nettopp tok, og et skritt flytter den høyst én celle. Øyets hukommelse holder nå tre ting:
+
+- **Mål** (som før, D49): summen av log-sannsynlighetene fra alle bildene.
+- **Agent**: en tro om agentcellen. Etter hver handling flyttes troen med handlingen (inn i veggen
+  betyr å bli stående). Når neste bilde kommer, ganges troen med det øyet ser, og med at agenten
+  ikke står på målet (da hadde episoden vært over). Et bilde som sier "agenten hoppet to celler"
+  blir dermed nesten ignorert.
+- **Besøk**: troen om agentcellen fra hvert skritt, summert med glemsel 0,9 per skritt.
+
+Controlleren får fire nye tall: for hver handling, hvor mye agenten nylig har vært i cellen den
+handlingen fører til. Å gå tilbake dit den kom fra gir ca. 0,9. Å gå inn i veggen gir over 1, fordi
+agenten blir stående der den er. Posisjonene i synet og agentkartet til nærsynet (fremsynet) kommer
+nå fra filteret i stedet for fra enkeltbildet.
+
+Alt regnes ut fra øyet til M og agentens egne handlinger. Derfor virker det likt i drømmen, der
+bildene er M sine spådommer, og i det ekte miljøet. Controlleren er fortsatt lineær (52 parametre i bruk,
+mot 36 i steg 7), og den lærer selv hvor mye besøk skal telle.
+
+To små ting underveis:
+- **Gulv på "ikke på målet".** I drømmen kan M tegne agenten oppå målet. Da ble troen null overalt
+  og fitness NaN. Vi gir faktoren samme gulv som øyet (0,001).
+- **Drømmen bruker også filteret.** Nærsynet spår hendelsene i drømmen ut fra filterets agentkart
+  for alle controllere, siden det er M sin beste gjetning. Det endrer drømmetallene for steg 7 litt
+  i evalueringen (lovet mål 59 % → 57 %, lovet krasj 10 % → 15 %), men ikke hvordan steg 7 spiller.
+
+### D58. Først en håndlagt test, så lært i drømmen
+Før vi trente noe, la vi sporing til steg 7-controlleren med uendrede vekter og en håndlagt vekt på
+−0,1 for besøk (på 1000 brett, seeds 100000–100999):
+
+| | Mål | Krasj | Avkortet |
+|---|---:|---:|---:|
+| Steg 7 | 74 % | 11 % | 16 % |
+| + filteret alene | 83 % | 9 % | 8 % |
+| + filteret og besøk | 89 % | 11 % | 0,2 % |
+
+Begge delene hjelper. Filteret alene halverer pendlingen, og besøksminnet fjerner resten. Den
+håndlagde varianten står i evalueringen som diagnostikk.
+
+Deretter trente vi en ny controller fra null i drømmen, med samme oppsett som i steg 7 (CMA-ES,
+200 generasjoner, formet belønning, to frø) og `--track`. Begge frøene nådde 88–93 % mål ved
+kontrollene underveis. Vi valgte frø 1 fordi drømmen ga den høyest fitness (+0,99 mot +0,95).
+
+### D59. Resultat: 93 % mål, 7 % krasj, ingen pendling
+På de samme 2000 brettene som i steg 5–7:
+
+| | Mål | Krasj | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Steg 7 | 75,4 % | 11,1 % | 13,6 % | +0,54 |
+| Steg 7 + sporing, håndlagt (diagnostikk) | 89,8 % | 10,1 % | 0,1 % | +0,75 |
+| **Steg 8: sporing** | **92,7 %** | **7,0 %** | **0,3 %** | **+0,81** |
+| Juks: mot målet, unngår hindringer | 98,5 % | 0 % | 1,6 % | +0,92 |
+
+- Parvis mot steg 7: +17 poeng mål (369 brett bare steg 8 klarte, 24 bare steg 7) og −4 poeng
+  krasj. Mot den håndlagde varianten: +3 poeng mål og −3 poeng krasj, så det lønte seg å la
+  drømmen finne vektene.
+- 6 avkortede episoder av 2000, ingen av dem pendling (mot 266).
+- Øyet med filter ser agenten riktig i 98 % av skrittene, mot 74 % uten.
+- Drømmen er nesten helt ærlig: den lover 95 % mål og 3,3 % krasj innen 10 skritt, og 95 % og
+  2,7 % skjer.
+- Ved 8 eller flere skritt til målet: 85 % mål, mot 62 % i steg 7.
+
+### D60. Det som gjenstår
+- **Krasj:** 7 % av episodene, de fleste i de første skrittene (76 i skritt 1–2, 50 i skritt 3–9).
+  I de første skrittene har filteret bare sett ett bilde, så det kan ikke rette øyet ennå.
+- **Avstand til juksen:** 6 poeng under grunnlinjen som leser miljøet direkte. Hullet er nesten
+  bare krasj.

@@ -327,9 +327,9 @@ def test_controller_with_sight_saves_flag_and_runs_with_eye_shaping(world, tmp_p
     assert (loaded.beliefs, loaded.lookahead, loaded.sight) == (False, True, True)
     z = torch.randn(3, 4)
     f, memory = world_features(rnn, z, (torch.zeros(1, 3, 8), torch.zeros(1, 3, 8)), False, True, sight=True)
-    assert torch.allclose(f[:, :4], rnn.seen_positions(z)) and memory.shape == (3, 64)
+    assert torch.allclose(f[:, :4], rnn.seen_positions(z)) and memory.goal.shape == (3, 64)
     starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
-    assert starts.goal_memory.shape == (len(starts), 64) and starts.sample(3, np.random.default_rng(0)).goal_memory.shape == (3, 64)
+    assert starts.memory.goal.shape == (len(starts), 64) and starts.sample(3, np.random.default_rng(0)).memory.agent.shape == (3, 64)
     pop = np.random.default_rng(0).normal(size=(2, c.num_params))
     d = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0, shaping=0.1), return_details=True)
     assert d["fitness"].shape == (2,) and np.abs(d["shaping"]).sum() > 0
@@ -397,4 +397,23 @@ def test_neighbour_eye_drives_dream_events_and_lookahead(world, tmp_path):
     pop = np.random.default_rng(0).normal(size=(2, c.num_params))
     d = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0), return_details=True)
     assert d["fitness"].shape == (2,) and (d["p_alive_end"] <= 1).all()
+    assert run_real_episodes(WorldModelAgent(vae, rnn, c), num_episodes=2)["episodes"] == 2
+
+
+def test_controller_with_tracking_saves_flag_and_runs_in_dream_and_reality(world, tmp_path):
+    from worldmodels.controller.features import num_world_features, world_features
+
+    vae, _, seqs = world
+    rnn = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, eye=True, eye_channels=4)).eval()
+    extra = num_world_features(rnn, beliefs=False, lookahead=True, sight=True, track=True)
+    assert extra == 12
+    c = LinearController(4, 8, extra_dim=extra, lookahead=True, sight=True, track=True)
+    c.save(tmp_path / "c.npz")
+    assert LinearController.load(tmp_path / "c.npz").track is True
+    with pytest.raises(ValueError):
+        world_features(rnn, torch.randn(2, 4), (torch.zeros(1, 2, 8), torch.zeros(1, 2, 8)), False, False, track=True)
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
+    assert torch.allclose(starts.memory.agent.sum(-1), torch.ones(len(starts)))
+    pop = np.random.default_rng(0).normal(size=(2, c.num_params))
+    assert dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0, shaping=0.1)).shape == (2,)
     assert run_real_episodes(WorldModelAgent(vae, rnn, c), num_episodes=2)["episodes"] == 2

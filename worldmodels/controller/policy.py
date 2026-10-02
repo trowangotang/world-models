@@ -16,17 +16,18 @@ import torch
 
 
 class LinearController:
-    """extra_dim > 0 gir controlleren ekstra inndata etter [z, h] (se features.py). beliefs, sight og
-    lookahead sier hvilke, slik at agenten regner ut de samme inndataene som under trening."""
+    """extra_dim > 0 gir controlleren ekstra inndata etter [z, h] (se features.py). beliefs, sight,
+    lookahead og track sier hvilke, slik at agenten regner ut de samme inndataene som under trening."""
 
     def __init__(
         self, z_dim: int, h_dim: int, num_actions: int = 4, extra_dim: int = 0,
-        beliefs: bool | None = None, lookahead: bool = False, sight: bool = False,
+        beliefs: bool | None = None, lookahead: bool = False, sight: bool = False, track: bool = False,
     ):
         self.z_dim, self.h_dim, self.num_actions, self.extra_dim = z_dim, h_dim, num_actions, extra_dim
         self.beliefs = (extra_dim > 0 and not lookahead and not sight) if beliefs is None else beliefs
         self.lookahead = lookahead
         self.sight = sight
+        self.track = track
         self.params = np.zeros(self.num_params, dtype=np.float32)
 
     @property
@@ -69,7 +70,7 @@ class LinearController:
         np.savez(
             path, params=self.params, z_dim=self.z_dim, h_dim=self.h_dim, num_actions=self.num_actions,
             extra_dim=self.extra_dim, beliefs=self.beliefs, lookahead=self.lookahead,
-            sight=self.sight, **extra,
+            sight=self.sight, track=self.track, **extra,
         )
 
     @classmethod
@@ -79,6 +80,7 @@ class LinearController:
             beliefs = bool(d["beliefs"]) if "beliefs" in d.files else None
             lookahead = bool(d["lookahead"]) if "lookahead" in d.files else False
             sight = bool(d["sight"]) if "sight" in d.files else False
-            c = cls(int(d["z_dim"]), int(d["h_dim"]), int(d["num_actions"]), extra_dim, beliefs, lookahead, sight)
+            track = bool(d["track"]) if "track" in d.files else False
+            c = cls(int(d["z_dim"]), int(d["h_dim"]), int(d["num_actions"]), extra_dim, beliefs, lookahead, sight, track)
             c.params = d["params"].astype(np.float32)
         return c
