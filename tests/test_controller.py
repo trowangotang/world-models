@@ -311,3 +311,46 @@ def test_controller_with_lookahead_only_saves_flags_and_runs(world, tmp_path):
     pop = np.random.default_rng(0).normal(size=(2, c.num_params))
     assert dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3)).shape == (2,)
     assert run_real_episodes(WorldModelAgent(vae, rnn, loaded), num_episodes=2)["episodes"] == 2
+
+
+def test_controller_with_sight_saves_flag_and_runs_with_eye_shaping(world, tmp_path):
+    from worldmodels.controller.features import num_world_features, world_features
+
+    vae, _, seqs = world
+    rnn = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, eye=True, eye_channels=4)).eval()
+    extra = num_world_features(rnn, beliefs=False, lookahead=True, sight=True)
+    assert extra == 8
+    c = LinearController(4, 8, extra_dim=extra, lookahead=True, sight=True)
+    assert c.beliefs is False
+    c.save(tmp_path / "c.npz")
+    loaded = LinearController.load(tmp_path / "c.npz")
+    assert (loaded.beliefs, loaded.lookahead, loaded.sight) == (False, True, True)
+    z = torch.randn(3, 4)
+    f, memory = world_features(rnn, z, (torch.zeros(1, 3, 8), torch.zeros(1, 3, 8)), False, True, sight=True)
+    assert torch.allclose(f[:, :4], rnn.seen_positions(z)) and memory.shape == (3, 64)
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
+    assert starts.goal_memory.shape == (len(starts), 64) and starts.sample(3, np.random.default_rng(0)).goal_memory.shape == (3, 64)
+    pop = np.random.default_rng(0).normal(size=(2, c.num_params))
+    d = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0, shaping=0.1), return_details=True)
+    assert d["fitness"].shape == (2,) and np.abs(d["shaping"]).sum() > 0
+    assert run_real_episodes(WorldModelAgent(vae, rnn, loaded), num_episodes=2)["episodes"] == 2
+
+
+def test_goal_memory_outvotes_a_single_wrong_frame():
+    rnn = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, eye=True, eye_channels=4)).eval()
+
+    class FixedEye(torch.nn.Module):
+        def forward(self, z):  # z[:, 0] sier hvilken celle målet er i, med stor sikkerhet
+            logits = torch.full((len(z), 2, 64), -20.0)
+            logits[torch.arange(len(z)), 1, z[:, 0].long()] = 20.0
+            return logits
+
+    rnn.eye = FixedEye()
+    z = torch.zeros(1, 4)
+    memory = None
+    for cell in (63, 63, 63, 0):          # tre bilder sier (7, 7), det siste sier (0, 0)
+        z[0, 0] = cell
+        seen, memory = rnn.see(z, memory)
+    assert torch.allclose(seen[0, 2:], torch.tensor([1.0, 1.0]), atol=1e-2)
+    # Uten minne følger troen bildet, litt dratt mot midten av gulvet i ett enkelt bilde.
+    assert torch.allclose(rnn.see(z)[0][0, 2:], torch.tensor([-1.0, -1.0]), atol=0.1)

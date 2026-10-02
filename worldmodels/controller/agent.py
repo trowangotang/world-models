@@ -24,10 +24,12 @@ class WorldModelAgent:
     def __init__(self, vae: ConvVAE, rnn: MDNRNN, controller: LinearController):
         self.vae, self.rnn, self.controller = vae.eval(), rnn.eval(), controller
         self.hidden = None
+        self.goal_memory = None
 
     def reset(self, batch_size: int) -> None:
         H = self.rnn.config.hidden_dim
         self.hidden = (torch.zeros(1, batch_size, H), torch.zeros(1, batch_size, H))
+        self.goal_memory = None
 
     @torch.no_grad()
     def act(self, obs: np.ndarray, epsilon: float = 0.0, rng: np.random.Generator | None = None) -> np.ndarray:
@@ -38,7 +40,10 @@ class WorldModelAgent:
         z, _ = self.vae.encode(to_tensor(obs))
         h = self.hidden[0][-1]
         c = self.controller
-        extra = world_features(self.rnn, z, self.hidden, c.beliefs, c.lookahead) if c.extra_dim else None
+        extra = None
+        if c.extra_dim:
+            extra, self.goal_memory = world_features(self.rnn, z, self.hidden, c.beliefs, c.lookahead, c.sight,
+                                                     self.goal_memory)
         a = self.controller.act(z, h, extra)
         if epsilon > 0:
             rng = rng if rng is not None else np.random.default_rng()
