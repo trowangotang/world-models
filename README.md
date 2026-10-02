@@ -36,6 +36,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ✅ ferdig: [rapport](docs/evaluation/report.md) |
 | 6. Bedre syn | `worldmodels/mdnrnn/eye.py` | ⚠️ øyet ser riktig, men drømmen tror ikke på det |
 | 7. Drømmen ser | `worldmodels/mdnrnn/neighbours.py` | ✅ når målet i 75 %, krasjer i 11 % |
+| 8. Slutt på pendlingen | `worldmodels/mdnrnn/tracker.py` | ✅ når målet i 93 %, krasjer i 7 %, pendler aldri |
 
 ## Miljøet: GridDodge
 
@@ -194,6 +195,17 @@ python -m worldmodels.mdnrnn.neighbours --rnn checkpoints/mdnrnn_eye.pt --data d
 python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_sense.pt --data data/v3/zseq_*.npz \
     --use-eye --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
     --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256 --seed 1 --out checkpoints/controller_sense.npz
+```
+
+### Steg 8: slutt på pendlingen
+
+```bash
+# Hvorfor steg 7 pendler, og steg 7-controlleren med sporing og håndlagt besøksvekt (~3 min)
+PYTHONPATH=. python docs/experiments/scripts/oscillation.py
+# Samme M og oppsett som steg 7, men controlleren får sporing og besøksminne (~65 min)
+python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_sense.pt --data data/v3/zseq_*.npz \
+    --use-eye --track --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
+    --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256 --seed 1 --out checkpoints/controller_track.npz
 ```
 
 ## Resultater fra steg 2
@@ -370,10 +382,6 @@ sett før. Hele rapporten med intervaller, flere tabeller og bilder: [`docs/eval
 
 ![Mål etter avstand](docs/evaluation/goal_by_distance.svg)
 
-*Samme brett, to agenter: der 4d (øverst) krasjet og 4e (nederst) kom frem. Streken går fra gul til hvit.*
-
-![Samme brett](docs/evaluation/compare_paths.png)
-
 Se D43–D47 i [`decisions.md`](decisions.md).
 
 ## Resultater fra steg 6: bedre syn
@@ -434,7 +442,33 @@ eller en hindring står i nabocellen, ut fra bildet og minnet om målet.
   Juks-grunnlinjen viser at en controller uten minne kan komme nesten helt opp i 99 %, så det er
   fortsatt rom. Se D52–D55.
 
-*Samme brett, to agenter: der steg 6 (øverst) krasjet og steg 7 (nederst) kom frem.*
+## Resultater fra steg 8: slutt på pendlingen
+
+I steg 7 endte 14 % av episodene med at agenten gikk frem og tilbake ved en hindring. Det hadde to
+årsaker. Øyet leser hvert bilde for seg, og når agenten står inntil målet eller en hindring, ser det
+ofte agenten i feil celle (riktig bare 58 % av skrittene i episodene som pendlet). Og controlleren
+husket ingenting, så den kunne gå inn i en vegg i 50 skritt uten å merke det.
+
+Løsningen er vår egen: **sporing**. M holder en tro om hvor agenten står og flytter den med hver
+handling, før den sammenligner med det øyet ser (et Bayes-filter). Den teller også hvor agenten har
+vært, med glemsel. Controlleren får vite hvor mye den nylig har vært i cellen hver handling fører
+til, og lærer selv i drømmen at det ikke lønner seg å gå tilbake.
+
+| Policy (2000 brett, 95 %-intervall) | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Steg 7: drømmen ser | 75 % | 11 % | 14 % | +0,54 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | 90 % | 10 % | 0,1 % | +0,75 |
+| **Steg 8: sporing** | **93 % (91–94)** | **7 % (6–8)** | **0,3 %** | **+0,81** |
+| *Juks: mot målet, unngår hindringer* | 99 % | 0 % | 2 % | 0,92 |
+
+- **Pendlingen er borte:** 6 avkortede episoder av 2000, og ingen av dem pendler (266 i steg 7).
+- **Bedre på alt:** +17 poeng mål og −4 poeng krasj mot steg 7, på de samme brettene. Ved lange
+  avstander (8+ skritt) når den målet i 85 %, mot 62 %.
+- **Øyet ser agenten riktig i 98 % av skrittene** med filteret, mot 74 % uten.
+- **Drømmen er nesten helt ærlig:** den lover 95 % mål og 3 % krasj innen 10 skritt; 95 % og 3 % skjer.
+- **Det som gjenstår** er krasj, særlig i de første skrittene før filteret har sett nok. Se D56–D60.
+
+*Samme brett, to agenter: der steg 7 (øverst) ble avkortet og steg 8 (nederst) kom frem.*
 
 ![Samme brett](docs/evaluation/compare_paths.png)
 
@@ -445,7 +479,7 @@ worldmodels/
   env/          GridDodge-miljøet og forhåndsvisning
   data/         tilfeldig policy og innsamling/lagring av rollouts
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
-  mdnrnn/       koding til z-sekvenser, MDN-RNN, øyet, trening og evaluering
+  mdnrnn/       koding til z-sekvenser, MDN-RNN, øyet, nærsynet, sporing, trening og evaluering
   controller/   lineær controller og inndata, ES og CMA-ES, drømmemiljø, kjøring i ekte miljø, iterativ trening
   evaluation/   steg 5: grunnlinjer, evaluering med intervaller, drøm mot virkelighet, figurer og rapport
 tests/          enhetstester (pytest)
