@@ -35,3 +35,9 @@ checkpointene og dataene fra steg 4b og 4c (se README og decisions.md D31–D35)
 |---|---|
 | `event_sources.py` | Hendelseshodet på h mot nærsynet: treff, presisjon og kalibrering (D53) |
 | `eye_dream_check.py` | Med `EYE_RNN=checkpoints/mdnrnn_sense.pt`: rangeringen i den nye drømmen (D53) |
+
+## Steg 8
+
+| Skript | Hva det viser |
+|---|---|
+| `oscillation.py` | Hvorfor steg 7-agenten pendler, og steg 7-controlleren med sporing og håndlagt besøksvekt; lagrer diagnostikk-controlleren (D56, D57) |
