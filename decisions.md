@@ -498,3 +498,52 @@ den fikk (9,6 % mot 2,5 %): drømmen ble utnyttet, som i D26. For 4e lover drøm
 skjer. 4d sin drøm er derimot for pessimistisk (31 % mål mot 50 %, 57 % krasj mot 34 %).
 M rangerer enkeltsituasjoner svakt (AUC 0,65–0,70 for 4d og 4e), så drømmen er god til å sammenligne
 policyer i snitt, men dårlig til å si hva som skjer på ett bestemt brett.
+
+## Steg 6: bedre syn
+
+### D48. Et øye formet som en dekoder
+Martin valgte å forbedre synet, fordi steg 5 viste at M sin tro om målet var flaskehalsen (D46).
+Informasjonen finnes i z (dekoderen tegner målet riktig i 81 %), men den er viklet inn. Vi målte
+tre lesere på z alene, trent på 18 000 episoder og testet på 2000 andre:
+
+| Leser av z | Agent | Mål |
+|---|---:|---:|
+| Lineær | 16 % | 2 % |
+| MLP, to lag | 87 % | 66 % |
+| **Romlig: z → 4x4-kart → 8x8-kart, én logit per celle** | **97 %** | **90 %** |
+
+Den romlige leseren er bygd som starten på en dekoder, og ga et stort sprang. Rutenettet er
+romlig, så en leser med romlig struktur trenger mye mindre for å lære det. Den ferdige versjonen
+(`mdnrnn/eye.py`, 32 kanaler, 43 000 parametre) ble trent i 8 epoker på alle z-sekvensene med M fryst:
+98,5 % agent og 94 % mål på nye episoder. Øyet lagres i M-sjekkpunktet (`mdnrnn_eye.pt`), slik at
+drømmen, agenten og controlleren finner det der de allerede finner M. Controlleren får det øyet ser
+med `--use-eye` (4 tall i samme format som posisjonstroen).
+
+### D49. Øyet husker målet
+En håndlaget "gå mot målet" på øyet nådde målet i 49 %, men ble avkortet i 15 %. Feilen var nesten
+alltid den samme: når agenten står like ved målet, tegner VAE-en dem utydelig, øyet mister målet,
+agenten snur, ser målet igjen, og snur tilbake. Målet står stille, så vi lar hvert bilde stemme:
+øyet summerer log(p + 0,001) for målets celle over alle bildene i episoden (`MDNRNN.see`). Ett
+bilde som bommer, blir nedstemt av de andre. Det ga 58 % mål og bare 4 % avkortet. Agentens
+posisjon leses fortsatt bare fra bildet nå, siden den flytter seg. Minnet følger med inn i drømmen
+fra oppvarmingsbildene.
+
+### D50. Med øyet er en enkel regel den beste agenten så langt
+Evaluert på de samme 2000 brettene som i steg 5 ser øyet målet riktig i 92 % av skrittene mens
+agenten spiller, mot 26 % for minnet til M, og 89 % allerede i første skritt (mot 1 %). Den
+håndlagde regelen på øyet når målet i 61 %, krasjer i 34 % og får avkastning +0,22, den første
+positive. Den er ikke lært, så den står i evalueringen som diagnostikk.
+
+### D51. Den lærte controlleren ble dårligere, fordi drømmen ikke vet det øyet vet
+Samme oppsett som 4e, men med syn i stedet for minnets tro: 28 % mål, 25 % krasj, 47 % avkortet,
+avkastning −0,23. Det er 13 poeng færre mål enn 4e på de samme brettene. Med bare syn (uten fremsyn)
+ble det 22 % mål ved siste kontroll under treningen.
+
+Drøm mot virkelighet forklarer hvorfor. For den håndlagde regelen lover drømmen 28 % mål og 45 %
+krasj innen 10 skritt; i virkeligheten skjer 69 % og 17 %. I drømmen er den derfor dårligere enn det
+søket fant (fitness −0,33 mot −0,16), selv om den er mye bedre i virkeligheten. Drømmens hendelser
+spås av M fra minnet h, og h vet fortsatt ikke hvor målet er. Øyet hjelper controlleren å se, men
+ikke drømmen å spå.
+
+Neste naturlige steg er derfor å la M bruke øyet når den spår hendelser, og så trene controlleren
+på nytt. Vi har ikke gjort det her, fordi det betyr å trene M på nytt. Det er et eget steg.
