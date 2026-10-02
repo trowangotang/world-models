@@ -33,7 +33,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 4c. Mål-bevisst drøm | `worldmodels/mdnrnn`, `worldmodels/controller` | ⚠️ drømmen kjenner igjen målet, men søket finner det ikke |
 | 4d. Bedre søk | `worldmodels/controller/cma.py` | ✅ når målet i 41 %, men krasjer i 55 % |
 | 4e. Unngå hindringer | `worldmodels/controller/features.py` | ✅ krasj ned til 34 %, men pendler i 29 % |
-| 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ⏳ ikke påbegynt |
+| 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ✅ ferdig: [rapport](docs/evaluation/report.md) |
 
 ## Miljøet: GridDodge
 
@@ -160,6 +160,14 @@ python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data da
 python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data data/v2/zseq_*.npz \
     --use-positions --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
     --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256   # ~35 min
+```
+
+### Steg 5: evaluering i ekte miljø
+
+```bash
+# Alle controllerne og fem grunnlinjer på de samme 2000 nye brettene (~4 min på 4 CPU-er).
+# Skriver docs/evaluation/report.md, results.json og figurene. Mangler et sjekkpunkt, hoppes det over.
+python -m worldmodels.evaluation --out docs/evaluation
 ```
 
 ## Resultater fra steg 2
@@ -300,6 +308,48 @@ Vi lærte MDN-RNN-en å holde orden på hvor agenten og målet er, ga controller
 - **Men agenten pendler.** I over halvparten av de avkortede episodene går den til side for en
   hindring og rett tilbake. En controller uten hukommelse om egne skritt kommer ikke rundt. Se D40–D42.
 
+## Resultater fra steg 5: evaluering av hele kjeden
+
+Alle policyer spilte de samme 2000 nye brettene (seeds 200 000–201 999), som ingen av dem har
+sett før. Hele rapporten med intervaller, flere tabeller og bilder: [`docs/evaluation/report.md`](docs/evaluation/report.md).
+
+![Utfall](docs/evaluation/outcomes.svg)
+
+| Policy (2000 brett, 95 %-intervall) | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 13 % (12–14) | 80 % (79–82) | 7 % | −0,83 |
+| Steg 4: lært i drømmen | 7 % (6–8) | 36 % (34–38) | 57 % | −0,58 |
+| Steg 4b: iterativ trening | 6 % (5–7) | 28 % (26–30) | 66 % | −0,56 |
+| Steg 4c: mål-bevisst drøm | 10 % (9–11) | 46 % (44–49) | 44 % | −0,62 |
+| Steg 4d: bedre søk | 43 % (41–45) | 54 % (52–56) | 3 % | −0,19 |
+| **Steg 4e: unngå hindringer** | **41 % (39–43)** | **32 % (30–34)** | **27 %** | **−0,12** |
+| *Juks: rett mot målet* | 66 % | 34 % | 0 % | 0,30 |
+| *Juks: rett mot målet, unngår hindringer* | 99 % | 0 % | 2 % | 0,92 |
+| *Juks: korteste vei* | 100 % | 0 % | 0 % | 0,96 |
+
+*Juks-policyene leser posisjonene rett fra miljøet. De er målestokker, ikke konkurrenter.*
+
+- **Sluttagenten (4e) er den beste så langt**, med best avkastning. På de samme brettene krasjer
+  den 22 prosentpoeng sjeldnere enn 4d (intervall 19–25), og når målet like ofte (−1,8 poeng,
+  intervall −4,3 til +0,7). Det største enkeltspranget i hele prosjektet var bedre søk (4c → 4d: +33 poeng mål).
+- **En controller uten hukommelse er nok.** "Gå mot målet, men aldri inn i en hindring" med sanne
+  posisjoner når målet i 99 % og pendler nesten aldri. Det er nøyaktig regelen 4e prøver å lære.
+  Pendlingen fra steg 4e skyldes altså ikke at C mangler minne, slik D42 antok, men at troen er feil.
+- **Flaskehalsen er hva M vet, ikke hva C gjør.** Mens 4e spiller, peker M sin tro på riktig celle
+  for agenten i 66 % av skrittene, men for målet bare i 26 % (snittfeil 2,2 celler). Og i første
+  skritt har M ikke sett noe ennå, så C går i blinde: 29 % av krasjene til 4e skjer i skritt 1–2.
+- **Drømmen har blitt ærligere.** Steg 4 drømte om fire ganger så mange mål som det fikk (10 % mot 2,5 %),
+  altså en drøm som ble utnyttet. For 4e lover drømmen 35 % mål innen 10 skritt, og 32 % skjer.
+  Men M skiller dårlig mellom enkeltsituasjoner (AUC 0,68–0,70), så tallet stemmer bare i snitt.
+
+![Mål etter avstand](docs/evaluation/goal_by_distance.svg)
+
+*Samme brett, to agenter: der 4d (øverst) krasjet og 4e (nederst) kom frem. Streken går fra gul til hvit.*
+
+![Samme brett](docs/evaluation/compare_paths.png)
+
+Se D43–D47 i [`decisions.md`](decisions.md).
+
 ## Prosjektstruktur
 
 ```
@@ -309,7 +359,8 @@ worldmodels/
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
   mdnrnn/       koding til z-sekvenser, MDN-RNN, trening og evaluering
   controller/   lineær controller og inndata, ES og CMA-ES, drømmemiljø, kjøring i ekte miljø, iterativ trening
+  evaluation/   steg 5: grunnlinjer, evaluering med intervaller, drøm mot virkelighet, figurer og rapport
 tests/          enhetstester (pytest)
-docs/           bilder til README, resultater og diagnoseskript fra eksperimenter
+docs/           bilder til README, evalueringsrapporten, resultater og diagnoseskript fra eksperimenter
 decisions.md    logg over valg og begrunnelser
 ```
