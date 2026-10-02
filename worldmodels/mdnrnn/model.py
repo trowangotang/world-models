@@ -40,6 +40,9 @@ class MDNRNNConfig:
     # Øyet leser posisjonene fra z, altså fra bildet som sees nå, ikke fra minnet (eye.py, D48).
     eye: bool = False
     eye_channels: int = 32
+    # Nærsynet spår hendelsene fra bildet og øyets målminne i stedet for fra h (neighbours.py, D52).
+    neighbours: bool = False
+    neighbour_channels: int = 32
 
 
 @dataclass
@@ -94,6 +97,12 @@ class MDNRNN(nn.Module):
             self.eye = SpatialEye(c.latent_dim, c.eye_channels, int(round(c.grid_cells ** 0.5)))
         else:
             self.eye = None
+        if c.neighbours:
+            from worldmodels.mdnrnn.neighbours import NeighbourEye
+
+            self.neighbours = NeighbourEye(c.latent_dim, c.neighbour_channels, int(round(c.grid_cells ** 0.5)))
+        else:
+            self.neighbours = None
 
     def forward(
         self, z: torch.Tensor, actions: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor] | None = None
@@ -174,14 +183,42 @@ class MDNRNN(nn.Module):
             parts.append(torch.sigmoid(self.obstacle_head(h)))
         return torch.cat(parts, dim=-1)
 
+    def event_probs(
+        self, event_logits: torch.Tensor, z: torch.Tensor, goal_memory: torch.Tensor | None, actions: torch.Tensor,
+    ) -> torch.Tensor:
+        """Sannsynlighet for [flytt, mål, hindring] (B, 3) når handlingen tas fra bildet z.
+
+        Med nærsyn kommer de fra bildet og øyets målminne (etter at z er sett), ellers fra
+        hendelseshodet på h (event_logits, (B, 3))."""
+        if self.neighbours is None:
+            return F.softmax(event_logits, dim=-1)
+        from worldmodels.mdnrnn.neighbours import event_probs_from_logits
+
+        return event_probs_from_logits(self.neighbour_logits(z, goal_memory), actions)
+
+    def neighbour_logits(self, z: torch.Tensor, goal_memory: torch.Tensor | None) -> torch.Tensor:
+        """Nærsynets logits (B, 2, 4). goal_memory skal allerede inneholde bildet z (se see)."""
+        logits = self.eye(z)
+        if goal_memory is None:
+            goal_memory = self.see(z)[1]
+        return self.neighbours(z, F.softmax(goal_memory, dim=-1), F.softmax(logits[..., 0, :], dim=-1))
+
     @torch.no_grad()
-    def lookahead_obstacle(self, z: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+    def lookahead_obstacle(
+        self, z: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor], goal_memory: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """Fremsyn ett skritt: sannsynligheten for å treffe en hindring for hver handling.
 
         z: (B, D), hidden: LSTM-tilstanden før skrittet. Kjører modellen én gang per handling
         (i én batch) uten å endre tilstanden. Returnerer (B, num_actions) (decisions.md D41).
+        Med nærsyn leses det rett fra bildet, samme kilde som drømmen bruker (D52).
         """
         from worldmodels.mdnrnn.encode import EVENT_OBSTACLE
+
+        if self.neighbours is not None:
+            # Samme regel som event_probs: mål vinner over hindring
+            logits = self.neighbour_logits(z, goal_memory)
+            return (1 - torch.sigmoid(logits[:, 0])) * torch.sigmoid(logits[:, 1])
 
         B, A = z.shape[0], self.config.num_actions
         zz = z.repeat(A, 1).unsqueeze(1)                                    # (A*B, 1, D)

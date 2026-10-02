@@ -128,4 +128,15 @@
 <circle cx="427.5" cy="253.8" r="3" fill="#1f77b4"/>
 <line x1="500" y1="226" x2="520" y2="226" stroke="#1f77b4" stroke-width="2"/>
 <text x="526" y="230" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 6: syn</text>
+<polyline fill="none" stroke="#ff7f0e" stroke-width="2" points="112.5,75.2 217.5,93.4 322.5,114.1 427.5,138.4"/>
+<line x1="112.5" y1="83.3" x2="112.5" y2="68.4" stroke="#ff7f0e" stroke-opacity="0.5"/>
+<circle cx="112.5" cy="75.2" r="3" fill="#ff7f0e"/>
+<line x1="217.5" y1="103.2" x2="217.5" y2="84.9" stroke="#ff7f0e" stroke-opacity="0.5"/>
+<circle cx="217.5" cy="93.4" r="3" fill="#ff7f0e"/>
+<line x1="322.5" y1="125.0" x2="322.5" y2="104.0" stroke="#ff7f0e" stroke-opacity="0.5"/>
+<circle cx="322.5" cy="114.1" r="3" fill="#ff7f0e"/>
+<line x1="427.5" y1="150.0" x2="427.5" y2="127.3" stroke="#ff7f0e" stroke-opacity="0.5"/>
+<circle cx="427.5" cy="138.4" r="3" fill="#ff7f0e"/>
+<line x1="500" y1="246" x2="520" y2="246" stroke="#ff7f0e" stroke-width="2"/>
+<text x="526" y="250" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 7: drømmen ser</text>
 </svg>

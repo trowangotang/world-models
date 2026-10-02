@@ -20,6 +20,7 @@ Generert av `python -m worldmodels.evaluation`. Tolkningen står i README.
 | Steg 4e: unngå hindringer | 40,8 % (39 %–43 %) | 31,9 % (30 %–34 %) | 27,3 % (25 %–29 %) | −0,12 (−0,15 – −0,08) | 21,4 |
 | Håndlaget på øyet (diagnostikk) | 61,4 % (59 %–63 %) | 34,2 % (32 %–36 %) | 4,4 % (4 %–5 %) | 0,22 (0,18 – 0,26) | 6,3 |
 | Steg 6: syn | 28,2 % (26 %–30 %) | 24,7 % (23 %–27 %) | 47,0 % (45 %–49 %) | −0,23 (−0,26 – −0,20) | 27,3 |
+| Steg 7: drømmen ser | 75,4 % (73 %–77 %) | 11,1 % (10 %–12 %) | 13,6 % (12 %–15 %) | 0,54 (0,51 – 0,57) | 11,2 |
 
 ![Utfall](outcomes.svg)
 
@@ -34,9 +35,10 @@ Forskjell i prosentpoeng (a − b). «Bare a» er brett der a lyktes og b ikke, 
 | Steg 4d: bedre søk | Steg 4c: mål-bevisst drøm | +32,8 (+30,5 til +35,0) | 736 / 80 | +7,5 (+4,5 til +10,5) |
 | Steg 4e: unngå hindringer | Steg 4d: bedre søk | −1,8 (−4,3 til +0,7) | 309 / 346 | −22,1 (−24,7 til −19,4) |
 | Steg 6: syn | Steg 4e: unngå hindringer | −12,6 (−15,1 til −10,2) | 193 / 445 | −7,2 (−9,4 til −5,0) |
-| Steg 6: syn | Tilfeldig | +15,4 (+13,0 til +17,6) | 462 / 154 | −55,8 (−58,1 til −53,3) |
-| Steg 6: syn | Rett mot målet, unngår hindringer (juks) | −70,2 (−72,2 til −68,2) | 2 / 1406 | +24,7 (+22,8 til +26,7) |
-| Steg 6: syn | Håndlaget på øyet (diagnostikk) | −33,1 (−35,5 til −30,7) | 103 / 765 | −9,6 (−11,6 til −7,4) |
+| Steg 7: drømmen ser | Steg 6: syn | +47,1 (+44,7 til +49,6) | 1004 / 61 | −13,7 (−15,5 til −11,8) |
+| Steg 7: drømmen ser | Tilfeldig | +62,5 (+60,2 til +64,8) | 1288 / 37 | −69,5 (−71,5 til −67,3) |
+| Steg 7: drømmen ser | Rett mot målet, unngår hindringer (juks) | −23,1 (−24,9 til −21,2) | 4 / 465 | +11,1 (+9,8 til +12,4) |
+| Steg 7: drømmen ser | Håndlaget på øyet (diagnostikk) | +14,1 (+11,9 til +16,2) | 403 / 122 | −23,2 (−25,2 til −21,2) |
 
 ## Etter avstand til målet
 
@@ -57,6 +59,7 @@ Målrate etter korteste vei fra start til mål (rundt hindringene).
 | Steg 4e: unngå hindringer | 57 % | 41 % | 36 % | 27 % |
 | Håndlaget på øyet (diagnostikk) | 87 % | 65 % | 54 % | 36 % |
 | Steg 6: syn | 44 % | 28 % | 20 % | 18 % |
+| Steg 7: drømmen ser | 86 % | 79 % | 72 % | 62 % |
 
 ![Mål etter avstand](goal_by_distance.svg)
 
@@ -78,6 +81,7 @@ Målrate etter korteste vei fra start til mål (rundt hindringene).
 | Steg 4e: unngå hindringer | 57 % | 28 % | 17 % | 43 % |
 | Håndlaget på øyet (diagnostikk) | 92 % | 37 % | 3 % | 59 % |
 | Steg 6: syn | 43 % | 17 % | 7 % | 38 % |
+| Steg 7: drømmen ser | 89 % | 64 % | 2 % | 18 % |
 
 ## Hvordan episodene ender
 
@@ -97,6 +101,7 @@ Pendling: avkortet, og innom høyst 3 ulike celler de siste 20 skrittene. Effekt
 | Steg 4e: unngå hindringer | 545 | 348 | 0,55 | 187 | 275 | 176 |
 | Håndlaget på øyet (diagnostikk) | 88 | 86 | 0,98 | 323 | 352 | 10 |
 | Steg 6: syn | 941 | 911 | 0,74 | 215 | 214 | 65 |
+| Steg 7: drømmen ser | 271 | 266 | 0,97 | 102 | 112 | 7 |
 
 ## Vet M hvor agenten og målet er?
 
@@ -134,6 +139,12 @@ Mens agenten spiller: andel skritt der M sin tro peker på riktig celle, og snit
 | Steg 6: syn | øye | 5 | 89 % | 0,3 | 95 % | 0,1 | 1405 |
 | Steg 6: syn | øye | 10 | 86 % | 0,4 | 94 % | 0,2 | 1115 |
 | Steg 6: syn | øye | alle | 87 % | 0,3 | 92 % | 0,2 | 54565 |
+| Steg 7: drømmen ser | øye | 0 | 93 % | 0,2 | 89 % | 0,3 | 2000 |
+| Steg 7: drømmen ser | øye | 1 | 92 % | 0,2 | 95 % | 0,2 | 1850 |
+| Steg 7: drømmen ser | øye | 2 | 92 % | 0,2 | 94 % | 0,2 | 1669 |
+| Steg 7: drømmen ser | øye | 5 | 83 % | 0,4 | 93 % | 0,2 | 974 |
+| Steg 7: drømmen ser | øye | 10 | 67 % | 0,8 | 85 % | 0,5 | 343 |
+| Steg 7: drømmen ser | øye | alle | 74 % | 0,7 | 88 % | 0,4 | 22397 |
 
 ## Drøm mot virkelighet
 
@@ -148,6 +159,7 @@ Etter 5 ekte skritt drømmer agenten 10 skritt videre fra nøyaktig den tilstand
 | Steg 4e: unngå hindringer | 1504 | 35,4 % | 32,0 % (30 %–34 %) | 0,68 | 18,9 % | 13,2 % (12 %–15 %) | 0,70 |
 | Håndlaget på øyet (diagnostikk) | 642 | 27,9 % | 68,8 % (65 %–72 %) | 0,67 | 45,0 % | 17,0 % (14 %–20 %) | 0,71 |
 | Steg 6: syn | 1405 | 19,7 % | 18,8 % (17 %–21 %) | 0,73 | 11,2 % | 7,0 % (6 %–8 %) | 0,75 |
+| Steg 7: drømmen ser | 974 | 59,0 % | 66,7 % (64 %–70 %) | 0,71 | 9,7 % | 4,9 % (4 %–6 %) | 0,69 |
 
 ![Drøm mot virkelighet, mål](dream_goal.svg)
 
@@ -155,7 +167,7 @@ Etter 5 ekte skritt drømmer agenten 10 skritt videre fra nøyaktig den tilstand
 
 ## Episoder fra sluttagenten
 
-Steg 6: syn. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.
+Steg 7: drømmen ser. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.
 
 ![Veier](final_paths.png)
 
@@ -165,6 +177,6 @@ Den første episoden av hvert utfall, skritt for skritt (16 første bilder):
 
 ## Samme brett, to agenter
 
-Brett der Steg 4e: unngå hindringer (øverst) krasjet og Steg 6: syn (nederst) kom frem.
+Brett der Steg 6: syn (øverst) krasjet og Steg 7: drømmen ser (nederst) kom frem.
 
 ![Sammenligning](compare_paths.png)

@@ -8,7 +8,8 @@ from worldmodels.mdnrnn.model import MDNRNN
 from worldmodels.vae.model import ConvVAE
 
 vae, _ = ConvVAE.load("checkpoints/vae_z32_w10.pt")
-rnn, _ = MDNRNN.load("checkpoints/mdnrnn_eye.pt")
+import os
+rnn, _ = MDNRNN.load(os.environ.get("EYE_RNN", "checkpoints/mdnrnn_eye.pt"))
 
 
 def handcrafted(lookahead_weight: float) -> LinearController:

@@ -85,4 +85,13 @@
 <circle cx="308.4" cy="126.7" r="2.3" fill="#e377c2" fill-opacity="0.7"/>
 <circle cx="348" cy="166" r="4" fill="#e377c2"/>
 <text x="358" y="170" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 6: syn</text>
+<polyline fill="none" stroke="#7f7f7f" stroke-width="1.5" points="64.6,291.2 105.0,274.6 160.6,291.6 213.5,269.4 267.8,235.0 311.9,274.0"/>
+<circle cx="64.6" cy="291.2" r="6.4" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="105.0" cy="274.6" r="4.1" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="160.6" cy="291.6" r="3.3" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="213.5" cy="269.4" r="2.7" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="267.8" cy="235.0" r="2.6" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="311.9" cy="274.0" r="2.5" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="348" cy="186" r="4" fill="#7f7f7f"/>
+<text x="358" y="190" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 7: drømmen ser</text>
 </svg>
