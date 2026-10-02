@@ -354,3 +354,47 @@ def test_goal_memory_outvotes_a_single_wrong_frame():
     assert torch.allclose(seen[0, 2:], torch.tensor([1.0, 1.0]), atol=1e-2)
     # Uten minne følger troen bildet, litt dratt mot midten av gulvet i ett enkelt bilde.
     assert torch.allclose(rnn.see(z)[0][0, 2:], torch.tensor([-1.0, -1.0]), atol=0.1)
+
+
+def test_neighbour_labels_and_event_probs():
+    from worldmodels.mdnrnn.neighbours import event_probs_from_logits, goal_direction_labels
+
+    # agent (0, 0); målet til høyre, under, langt unna og ukjent
+    labels = goal_direction_labels(np.array([0, 0, 0, 0]), np.array([1, 8, 63, -1]))
+    assert labels.tolist() == [[0, 0, 0, 1], [0, 1, 0, 0], [0, 0, 0, 0], [-1, -1, -1, -1]]
+    logits = torch.tensor([[[10.0, -10, -10, -10], [10.0, 10, -10, -10]]])  # mål opp; hindring opp og ned
+    p = event_probs_from_logits(logits.repeat(3, 1, 1), torch.tensor([0, 1, 2]))
+    assert torch.allclose(p.sum(1), torch.ones(3))
+    assert p[0, 1] > 0.99 and p[1, 2] > 0.99 and p[2, 0] > 0.99   # opp: mål, ned: krasj, venstre: flytt
+
+
+def test_neighbour_eye_drives_dream_events_and_lookahead(world, tmp_path):
+    from worldmodels.mdnrnn.neighbours import neighbour_data, neighbour_metrics
+
+    vae, _, seqs = world
+    cfg = MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, eye=True, eye_channels=4, neighbours=True,
+                       neighbour_channels=4)
+    rnn = MDNRNN(cfg).eval()
+    z, hidden = torch.randn(3, 4), (torch.zeros(1, 3, 8), torch.zeros(1, 3, 8))
+    _, memory = rnn.see(z)
+    p = rnn.event_probs(torch.zeros(3, 3), z, memory, torch.tensor([0, 1, 2]))
+    assert torch.allclose(p.sum(1), torch.ones(3))
+    logits = rnn.neighbour_logits(z, memory)
+    look = rnn.lookahead_obstacle(z, hidden, memory)
+    assert torch.allclose(look, (1 - torch.sigmoid(logits[:, 0])) * torch.sigmoid(logits[:, 1]))
+    rnn.save(tmp_path / "m.pt")
+    loaded, _ = MDNRNN.load(tmp_path / "m.pt")
+    assert torch.allclose(loaded.neighbour_logits(z, memory), logits)
+
+    train, val = neighbour_data(rnn, seqs, np.array([0, 1]))
+    assert train[0].shape[1] == 4 and train[1].shape[1] == train[2].shape[1] == 64 and train[3].shape[1:] == (2, 4)
+    assert torch.allclose(train[1].sum(1), torch.ones(len(train[1])))
+    assert torch.allclose(train[2].sum(1), torch.ones(len(train[2])))
+    assert set(neighbour_metrics(rnn.neighbours, val)) == {"goal", "obstacle"}
+
+    c = LinearController(4, 8, extra_dim=8, lookahead=True, sight=True)
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
+    pop = np.random.default_rng(0).normal(size=(2, c.num_params))
+    d = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0), return_details=True)
+    assert d["fitness"].shape == (2,) and (d["p_alive_end"] <= 1).all()
+    assert run_real_episodes(WorldModelAgent(vae, rnn, c), num_episodes=2)["episodes"] == 2
