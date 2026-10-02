@@ -37,6 +37,9 @@ class MDNRNNConfig:
     position_head: bool = False
     grid_cells: int = 64
     obstacle_head: bool = False
+    # Øyet leser posisjonene fra z, altså fra bildet som sees nå, ikke fra minnet (eye.py, D48).
+    eye: bool = False
+    eye_channels: int = 32
 
 
 @dataclass
@@ -85,6 +88,12 @@ class MDNRNN(nn.Module):
         # Hjelpehode nr. 2: står det en hindring i nabocellen i hver retning? Også lineært fra h,
         # av samme grunn (decisions.md D40).
         self.obstacle_head = nn.Linear(c.hidden_dim, c.num_actions) if c.obstacle_head else None
+        if c.eye:
+            from worldmodels.mdnrnn.eye import SpatialEye
+
+            self.eye = SpatialEye(c.latent_dim, c.eye_channels, int(round(c.grid_cells ** 0.5)))
+        else:
+            self.eye = None
 
     def forward(
         self, z: torch.Tensor, actions: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor] | None = None
@@ -131,6 +140,27 @@ class MDNRNN(nn.Module):
         rows = (probs.view(*probs.shape[:-1], side, side).sum(-1) * coords).sum(-1)  # (..., 2)
         cols = (probs.view(*probs.shape[:-1], side, side).sum(-2) * coords).sum(-1)
         return torch.stack([rows[..., 0], cols[..., 0], rows[..., 1], cols[..., 1]], dim=-1)
+
+    def seen_positions(self, z: torch.Tensor) -> torch.Tensor:
+        """Øyets tro om posisjonene, fra z alene: (..., D) -> (..., 4) i [-1, 1], samme format
+        som position_features. Krever eye=True."""
+        return self.see(z)[0]
+
+    def see(self, z: torch.Tensor, goal_memory: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        """Det controlleren ser: agenten fra bildet nå, målet fra alle bildene så langt.
+
+        Målet står stille, så hvert bilde er en stemme om hvor det er. goal_memory (B, celler) er
+        summen av log-sannsynlighetene fra bildene før, None ved start. Et bilde der øyet bommer
+        (oftest når agenten står like ved målet) blir nedstemt av de andre (decisions.md D49).
+        Returnerer (posisjoner (B, 4) i [-1, 1], ny goal_memory)."""
+        from worldmodels.mdnrnn.eye import GOAL_EVIDENCE_FLOOR, expected_positions
+
+        logits = self.eye(z)
+        evidence = torch.log(F.softmax(logits[..., 1, :], dim=-1) + GOAL_EVIDENCE_FLOOR)
+        memory = evidence if goal_memory is None else goal_memory + evidence
+        side = int(round(self.config.grid_cells ** 0.5))
+        combined = torch.stack([logits[..., 0, :], memory], dim=-2)
+        return expected_positions(combined, side), memory
 
     @property
     def num_belief_features(self) -> int:
