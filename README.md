@@ -27,8 +27,8 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 |------|-------|--------|
 | 1. Miljø + tilfeldige rollouts | `worldmodels/env`, `worldmodels/data` | ✅ ferdig og godkjent |
 | 2. VAE | `worldmodels/vae` | ✅ ferdig |
-| 3. MDN-RNN | `worldmodels/mdnrnn` | ✅ ferdig, venter på godkjenning |
-| 4. Controller trent i drømmen | `worldmodels/controller` | ⏳ ikke påbegynt |
+| 3. MDN-RNN | `worldmodels/mdnrnn` | ✅ ferdig |
+| 4. Controller trent i drømmen | `worldmodels/controller` | ⚠️ virker, men når sjelden målet |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ⏳ ikke påbegynt |
 
 ## Miljøet: GridDodge
@@ -104,6 +104,16 @@ python -m worldmodels.mdnrnn.evaluate checkpoints/mdnrnn.pt \
     --vae checkpoints/vae_z32_w10.pt --image dream.png
 ```
 
+### Steg 4: tren controlleren i drømmen
+
+```bash
+python -m worldmodels.controller.train --vae checkpoints/vae_z32_w10.pt \
+    --rnn checkpoints/mdnrnn_direct_k5.pt --data data/zseq_20k.npz \
+    --generations 300 --starts 256 --out checkpoints/controller.npz            # ~20 min
+```
+
+Loggen viser både hvor godt controlleren gjør det i drømmen og i det ekte miljøet.
+
 ## Resultater fra steg 2
 
 ![Rekonstruksjoner](docs/experiments/vae_20k_recon.png)
@@ -155,6 +165,25 @@ noen skritt, men sporer av: agenter blir borte, og mål dukker opp der det ikke 
 - **Mål er vanskelige å forutse** (16 %). Det er den største svakheten før steg 4.
 - Veien hit gikk gjennom 8 varianter. Se D20–D22 i `decisions.md`.
 
+## Resultater fra steg 4
+
+En lineær controller på [z, h] trenes med en evolusjonsstrategi, bare i drømmen. Drømmene starter
+etter 5 ekte oppvarmingsskritt og varer 10 skritt. Deretter måles den i det ekte miljøet på
+episoder den aldri har sett.
+
+| Policy | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 11 % | 82 % | 7 % | −0,85 |
+| **Controller trent i drømmen** | 6 % | 38 % | 57 % | −0,62 |
+| Korteste vei (juks, kjenner kartet) | 100 % | 0 % | 0 % | +0,95 |
+
+- **Den har lært å unngå hindringer.** Den krasjer halvparten så ofte som tilfeldig.
+- **Men den finner ikke målet.** Den går mest mot høyre, blir stående ved veggen og venter ut tiden.
+- **Drømmen blir lurt.** Drømmen tror controlleren når målet i opptil 36 % av tilfellene, mens det
+  i virkeligheten skjer i 7 %. MDN-RNN-en forutser bare 16 % av mål-hendelsene, så controlleren
+  lærer å utnytte feil i drømmen i stedet for å finne målet.
+- Høyere temperatur i drømmen, som artikkelen foreslår, hjalp ikke. Se D26–D27.
+
 ## Prosjektstruktur
 
 ```
@@ -163,6 +192,7 @@ worldmodels/
   data/         tilfeldig policy og innsamling/lagring av rollouts
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
   mdnrnn/       koding til z-sekvenser, MDN-RNN, trening og evaluering
+  controller/   lineær controller, evolusjonsstrategi, drømmemiljø og kjøring i ekte miljø
 tests/          enhetstester (pytest)
 docs/           bilder til README og resultater fra eksperimenter
 decisions.md    logg over valg og begrunnelser

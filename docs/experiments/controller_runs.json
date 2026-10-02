@@ -1,0 +1,566 @@
+{
+  "baselines_real_1000_episodes_seed_100000": {
+    "random_sticky": {
+      "goal": 0.112,
+      "obstacle": 0.819,
+      "truncated": 0.069,
+      "mean_return": -0.853
+    },
+    "random_uniform": {
+      "goal": 0.12,
+      "obstacle": 0.799,
+      "truncated": 0.081,
+      "mean_return": -0.836
+    },
+    "random_avoiding_obstacles_cheat": {
+      "goal": 0.285,
+      "obstacle": 0.0,
+      "truncated": 0.715,
+      "mean_return": -0.13
+    },
+    "shortest_path_cheat": {
+      "goal": 1.0,
+      "obstacle": 0.0,
+      "truncated": 0.0,
+      "mean_return": 0.955
+    }
+  },
+  "controllers": {
+    "s64": {
+      "description": "64 starter, tau 1",
+      "hparams": {
+        "generations": 300,
+        "population": 32,
+        "starts_per_generation": 64,
+        "sigma": 0.1,
+        "lr": 0.03,
+        "context": 5,
+        "horizon": 10,
+        "temperature": 1.0,
+        "seed": 0,
+        "vae": "checkpoints/vae_z32_w10.pt",
+        "rnn": "checkpoints/mdnrnn_direct_k5.pt"
+      },
+      "final": {
+        "generation": 300,
+        "fitness_mean": -0.07778359949588776,
+        "fitness_max": -0.012670459225773811,
+        "dream_fitness": 0.01143290102481842,
+        "dream_p_goal": 0.2342570573091507,
+        "dream_p_obstacle": 0.15254519879817963,
+        "action_share": [
+          0.07400000095367432,
+          0.13500000536441803,
+          0.017999999225139618,
+          0.7730000019073486
+        ],
+        "real": {
+          "episodes": 200,
+          "goal_rate": 0.045,
+          "obstacle_rate": 0.34,
+          "truncated_rate": 0.615,
+          "mean_return": -0.615,
+          "mean_length": 32.385
+        }
+      },
+      "checks": [
+        {
+          "generation": 25,
+          "dream_fitness": -0.019078021869063377,
+          "dream_p_goal": 0.2125447541475296,
+          "real_goal_rate": 0.045,
+          "real_obstacle_rate": 0.34,
+          "real_mean_return": -0.61755
+        },
+        {
+          "generation": 50,
+          "dream_fitness": -0.025364389643073082,
+          "dream_p_goal": 0.21260765194892883,
+          "real_goal_rate": 0.065,
+          "real_obstacle_rate": 0.3,
+          "real_mean_return": -0.5641
+        },
+        {
+          "generation": 75,
+          "dream_fitness": 0.0021648919209837914,
+          "dream_p_goal": 0.21832239627838135,
+          "real_goal_rate": 0.065,
+          "real_obstacle_rate": 0.315,
+          "real_mean_return": -0.57215
+        },
+        {
+          "generation": 100,
+          "dream_fitness": 0.005023842677474022,
+          "dream_p_goal": 0.23084470629692078,
+          "real_goal_rate": 0.045,
+          "real_obstacle_rate": 0.345,
+          "real_mean_return": -0.6181
+        },
+        {
+          "generation": 125,
+          "dream_fitness": 0.0030989181250333786,
+          "dream_p_goal": 0.22859500348567963,
+          "real_goal_rate": 0.055,
+          "real_obstacle_rate": 0.31,
+          "real_mean_return": -0.5834
+        },
+        {
+          "generation": 150,
+          "dream_fitness": 0.025734689086675644,
+          "dream_p_goal": 0.22084560990333557,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.29,
+          "real_mean_return": -0.57985
+        },
+        {
+          "generation": 175,
+          "dream_fitness": 0.009132888168096542,
+          "dream_p_goal": 0.21679820120334625,
+          "real_goal_rate": 0.06,
+          "real_obstacle_rate": 0.315,
+          "real_mean_return": -0.5798500000000001
+        },
+        {
+          "generation": 200,
+          "dream_fitness": 0.0253191739320755,
+          "dream_p_goal": 0.22968429327011108,
+          "real_goal_rate": 0.045,
+          "real_obstacle_rate": 0.325,
+          "real_mean_return": -0.6064500000000002
+        },
+        {
+          "generation": 225,
+          "dream_fitness": 0.04376434162259102,
+          "dream_p_goal": 0.24522851407527924,
+          "real_goal_rate": 0.06,
+          "real_obstacle_rate": 0.335,
+          "real_mean_return": -0.5934
+        },
+        {
+          "generation": 250,
+          "dream_fitness": -0.015129714272916317,
+          "dream_p_goal": 0.2149796485900879,
+          "real_goal_rate": 0.065,
+          "real_obstacle_rate": 0.315,
+          "real_mean_return": -0.57315
+        },
+        {
+          "generation": 275,
+          "dream_fitness": 0.008372372016310692,
+          "dream_p_goal": 0.22930678725242615,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.325,
+          "real_mean_return": -0.6009
+        },
+        {
+          "generation": 300,
+          "dream_fitness": 0.01143290102481842,
+          "dream_p_goal": 0.2342570573091507,
+          "real_goal_rate": 0.045,
+          "real_obstacle_rate": 0.34,
+          "real_mean_return": -0.615
+        }
+      ]
+    },
+    "s256": {
+      "description": "256 starter, tau 1",
+      "hparams": {
+        "generations": 300,
+        "population": 32,
+        "starts_per_generation": 256,
+        "sigma": 0.1,
+        "lr": 0.03,
+        "context": 5,
+        "horizon": 10,
+        "temperature": 1.0,
+        "seed": 0,
+        "vae": "checkpoints/vae_z32_w10.pt",
+        "rnn": "checkpoints/mdnrnn_direct_k5.pt"
+      },
+      "final": {
+        "generation": 300,
+        "fitness_mean": 0.012259066104888916,
+        "fitness_max": 0.0658034235239029,
+        "dream_fitness": 0.0578472837805748,
+        "dream_p_goal": 0.2761758267879486,
+        "dream_p_obstacle": 0.15093304216861725,
+        "action_share": [
+          0.003000000026077032,
+          0.22300000488758087,
+          0.009999999776482582,
+          0.7630000114440918
+        ],
+        "real": {
+          "episodes": 200,
+          "goal_rate": 0.06,
+          "obstacle_rate": 0.375,
+          "truncated_rate": 0.565,
+          "mean_return": -0.6181500000000001,
+          "mean_length": 30.75
+        }
+      },
+      "checks": [
+        {
+          "generation": 25,
+          "dream_fitness": 0.017374517396092415,
+          "dream_p_goal": 0.23120830953121185,
+          "real_goal_rate": 0.04,
+          "real_obstacle_rate": 0.325,
+          "real_mean_return": -0.61495
+        },
+        {
+          "generation": 50,
+          "dream_fitness": 0.013471277430653572,
+          "dream_p_goal": 0.23005124926567078,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.31,
+          "real_mean_return": -0.5947
+        },
+        {
+          "generation": 75,
+          "dream_fitness": 0.02400914579629898,
+          "dream_p_goal": 0.23560701310634613,
+          "real_goal_rate": 0.04,
+          "real_obstacle_rate": 0.345,
+          "real_mean_return": -0.6240000000000001
+        },
+        {
+          "generation": 100,
+          "dream_fitness": 0.021410074084997177,
+          "dream_p_goal": 0.24140335619449615,
+          "real_goal_rate": 0.065,
+          "real_obstacle_rate": 0.345,
+          "real_mean_return": -0.59035
+        },
+        {
+          "generation": 125,
+          "dream_fitness": 0.02604427933692932,
+          "dream_p_goal": 0.2679062485694885,
+          "real_goal_rate": 0.075,
+          "real_obstacle_rate": 0.35,
+          "real_mean_return": -0.5769500000000001
+        },
+        {
+          "generation": 150,
+          "dream_fitness": 0.029372718185186386,
+          "dream_p_goal": 0.27027106285095215,
+          "real_goal_rate": 0.07,
+          "real_obstacle_rate": 0.365,
+          "real_mean_return": -0.5924
+        },
+        {
+          "generation": 175,
+          "dream_fitness": 0.03298579156398773,
+          "dream_p_goal": 0.26942601799964905,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.385,
+          "real_mean_return": -0.6373000000000001
+        },
+        {
+          "generation": 200,
+          "dream_fitness": 0.0500793494284153,
+          "dream_p_goal": 0.2825359106063843,
+          "real_goal_rate": 0.065,
+          "real_obstacle_rate": 0.35,
+          "real_mean_return": -0.5943
+        },
+        {
+          "generation": 225,
+          "dream_fitness": 0.044820673763751984,
+          "dream_p_goal": 0.26917606592178345,
+          "real_goal_rate": 0.065,
+          "real_obstacle_rate": 0.38,
+          "real_mean_return": -0.6106
+        },
+        {
+          "generation": 250,
+          "dream_fitness": 0.01198902539908886,
+          "dream_p_goal": 0.2461736500263214,
+          "real_goal_rate": 0.06,
+          "real_obstacle_rate": 0.36,
+          "real_mean_return": -0.6052
+        },
+        {
+          "generation": 275,
+          "dream_fitness": 0.02728196233510971,
+          "dream_p_goal": 0.25767970085144043,
+          "real_goal_rate": 0.07,
+          "real_obstacle_rate": 0.36,
+          "real_mean_return": -0.59685
+        },
+        {
+          "generation": 300,
+          "dream_fitness": 0.0578472837805748,
+          "dream_p_goal": 0.2761758267879486,
+          "real_goal_rate": 0.06,
+          "real_obstacle_rate": 0.375,
+          "real_mean_return": -0.6181500000000001
+        }
+      ]
+    },
+    "t0": {
+      "description": "256 starter, tau 0",
+      "hparams": {
+        "generations": 150,
+        "population": 32,
+        "starts_per_generation": 256,
+        "sigma": 0.1,
+        "lr": 0.03,
+        "context": 5,
+        "horizon": 10,
+        "temperature": 0.0,
+        "seed": 0,
+        "vae": "checkpoints/vae_z32_w10.pt",
+        "rnn": "checkpoints/mdnrnn_direct_k5.pt"
+      },
+      "final": {
+        "generation": 150,
+        "fitness_mean": 0.1888502985239029,
+        "fitness_max": 0.22767336666584015,
+        "dream_fitness": 0.1420910656452179,
+        "dream_p_goal": 0.35641318559646606,
+        "dream_p_obstacle": 0.1529749184846878,
+        "action_share": [
+          0.06199999898672104,
+          0.26600000262260437,
+          0.003000000026077032,
+          0.6690000295639038
+        ],
+        "real": {
+          "episodes": 200,
+          "goal_rate": 0.07,
+          "obstacle_rate": 0.395,
+          "truncated_rate": 0.535,
+          "mean_return": -0.6197500000000001,
+          "mean_length": 29.94
+        }
+      },
+      "checks": [
+        {
+          "generation": 25,
+          "dream_fitness": 0.11355766654014587,
+          "dream_p_goal": 0.2951296269893646,
+          "real_goal_rate": 0.065,
+          "real_obstacle_rate": 0.345,
+          "real_mean_return": -0.5926
+        },
+        {
+          "generation": 50,
+          "dream_fitness": 0.14045843482017517,
+          "dream_p_goal": 0.33856379985809326,
+          "real_goal_rate": 0.055,
+          "real_obstacle_rate": 0.38,
+          "real_mean_return": -0.6369500000000001
+        },
+        {
+          "generation": 75,
+          "dream_fitness": 0.1672576665878296,
+          "dream_p_goal": 0.3751383423805237,
+          "real_goal_rate": 0.055,
+          "real_obstacle_rate": 0.4,
+          "real_mean_return": -0.63935
+        },
+        {
+          "generation": 100,
+          "dream_fitness": 0.17799292504787445,
+          "dream_p_goal": 0.3907100260257721,
+          "real_goal_rate": 0.06,
+          "real_obstacle_rate": 0.445,
+          "real_mean_return": -0.6597500000000001
+        },
+        {
+          "generation": 125,
+          "dream_fitness": 0.18154127895832062,
+          "dream_p_goal": 0.38902637362480164,
+          "real_goal_rate": 0.075,
+          "real_obstacle_rate": 0.395,
+          "real_mean_return": -0.6116
+        },
+        {
+          "generation": 150,
+          "dream_fitness": 0.1420910656452179,
+          "dream_p_goal": 0.35641318559646606,
+          "real_goal_rate": 0.07,
+          "real_obstacle_rate": 0.395,
+          "real_mean_return": -0.6197500000000001
+        }
+      ]
+    },
+    "t1.5": {
+      "description": "256 starter, tau 1.5",
+      "hparams": {
+        "generations": 150,
+        "population": 32,
+        "starts_per_generation": 256,
+        "sigma": 0.1,
+        "lr": 0.03,
+        "context": 5,
+        "horizon": 10,
+        "temperature": 1.5,
+        "seed": 0,
+        "vae": "checkpoints/vae_z32_w10.pt",
+        "rnn": "checkpoints/mdnrnn_direct_k5.pt"
+      },
+      "final": {
+        "generation": 150,
+        "fitness_mean": -0.036763742566108704,
+        "fitness_max": 0.007687007077038288,
+        "dream_fitness": -0.009702546522021294,
+        "dream_p_goal": 0.2209463119506836,
+        "dream_p_obstacle": 0.16120114922523499,
+        "action_share": [
+          0.004000000189989805,
+          0.20399999618530273,
+          0.0,
+          0.7919999957084656
+        ],
+        "real": {
+          "episodes": 200,
+          "goal_rate": 0.05,
+          "obstacle_rate": 0.315,
+          "truncated_rate": 0.635,
+          "mean_return": -0.5935,
+          "mean_length": 33.215
+        }
+      },
+      "checks": [
+        {
+          "generation": 25,
+          "dream_fitness": -0.010600686073303223,
+          "dream_p_goal": 0.21433573961257935,
+          "real_goal_rate": 0.04,
+          "real_obstacle_rate": 0.32,
+          "real_mean_return": -0.6104
+        },
+        {
+          "generation": 50,
+          "dream_fitness": -0.017277607694268227,
+          "dream_p_goal": 0.20165376365184784,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.28,
+          "real_mean_return": -0.5735
+        },
+        {
+          "generation": 75,
+          "dream_fitness": -0.01848774589598179,
+          "dream_p_goal": 0.20104828476905823,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.3,
+          "real_mean_return": -0.5857500000000001
+        },
+        {
+          "generation": 100,
+          "dream_fitness": -0.02549070306122303,
+          "dream_p_goal": 0.20410388708114624,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.315,
+          "real_mean_return": -0.59285
+        },
+        {
+          "generation": 125,
+          "dream_fitness": -0.04501757025718689,
+          "dream_p_goal": 0.19383862614631653,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.32,
+          "real_mean_return": -0.59565
+        },
+        {
+          "generation": 150,
+          "dream_fitness": -0.009702546522021294,
+          "dream_p_goal": 0.2209463119506836,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.315,
+          "real_mean_return": -0.5935
+        }
+      ]
+    },
+    "t2.5": {
+      "description": "256 starter, tau 2.5",
+      "hparams": {
+        "generations": 150,
+        "population": 32,
+        "starts_per_generation": 256,
+        "sigma": 0.1,
+        "lr": 0.03,
+        "context": 5,
+        "horizon": 10,
+        "temperature": 2.5,
+        "seed": 0,
+        "vae": "checkpoints/vae_z32_w10.pt",
+        "rnn": "checkpoints/mdnrnn_direct_k5.pt"
+      },
+      "final": {
+        "generation": 150,
+        "fitness_mean": -0.09837794303894043,
+        "fitness_max": -0.05053350329399109,
+        "dream_fitness": -0.08161993324756622,
+        "dream_p_goal": 0.17918406426906586,
+        "dream_p_obstacle": 0.18951201438903809,
+        "action_share": [
+          0.013000000268220901,
+          0.453000009059906,
+          0.009999999776482582,
+          0.5239999890327454
+        ],
+        "real": {
+          "episodes": 200,
+          "goal_rate": 0.055,
+          "obstacle_rate": 0.3,
+          "truncated_rate": 0.645,
+          "mean_return": -0.58175,
+          "mean_length": 34.03
+        }
+      },
+      "checks": [
+        {
+          "generation": 25,
+          "dream_fitness": -0.10320033133029938,
+          "dream_p_goal": 0.16647969186306,
+          "real_goal_rate": 0.035,
+          "real_obstacle_rate": 0.27,
+          "real_mean_return": -0.5923
+        },
+        {
+          "generation": 50,
+          "dream_fitness": -0.09551286697387695,
+          "dream_p_goal": 0.17355987429618835,
+          "real_goal_rate": 0.035,
+          "real_obstacle_rate": 0.27,
+          "real_mean_return": -0.59035
+        },
+        {
+          "generation": 75,
+          "dream_fitness": -0.08991418778896332,
+          "dream_p_goal": 0.17172974348068237,
+          "real_goal_rate": 0.055,
+          "real_obstacle_rate": 0.26,
+          "real_mean_return": -0.55505
+        },
+        {
+          "generation": 100,
+          "dream_fitness": -0.07326780259609222,
+          "dream_p_goal": 0.18518170714378357,
+          "real_goal_rate": 0.045,
+          "real_obstacle_rate": 0.255,
+          "real_mean_return": -0.5703
+        },
+        {
+          "generation": 125,
+          "dream_fitness": -0.069255530834198,
+          "dream_p_goal": 0.17662782967090607,
+          "real_goal_rate": 0.05,
+          "real_obstacle_rate": 0.26,
+          "real_mean_return": -0.5614
+        },
+        {
+          "generation": 150,
+          "dream_fitness": -0.08161993324756622,
+          "dream_p_goal": 0.17918406426906586,
+          "real_goal_rate": 0.055,
+          "real_obstacle_rate": 0.3,
+          "real_mean_return": -0.58175
+        }
+      ]
+    }
+  }
+}
