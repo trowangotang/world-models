@@ -67,4 +67,22 @@
 <circle cx="308.8" cy="110.9" r="2.6" fill="#9467bd" fill-opacity="0.7"/>
 <circle cx="348" cy="126" r="4" fill="#9467bd"/>
 <text x="358" y="130" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 4e: unngå hindringer</text>
+<polyline fill="none" stroke="#8c564b" stroke-width="1.5" points="67.4,282.9 110.4,276.8 162.7,244.8 215.6,262.9 271.0,243.5 311.5,211.9"/>
+<circle cx="67.4" cy="282.9" r="4.2" fill="#8c564b" fill-opacity="0.7"/>
+<circle cx="110.4" cy="276.8" r="3.7" fill="#8c564b" fill-opacity="0.7"/>
+<circle cx="162.7" cy="244.8" r="3.5" fill="#8c564b" fill-opacity="0.7"/>
+<circle cx="215.6" cy="262.9" r="3.3" fill="#8c564b" fill-opacity="0.7"/>
+<circle cx="271.0" cy="243.5" r="3.6" fill="#8c564b" fill-opacity="0.7"/>
+<circle cx="311.5" cy="211.9" r="3.9" fill="#8c564b" fill-opacity="0.7"/>
+<circle cx="348" cy="146" r="4" fill="#8c564b"/>
+<text x="358" y="150" font-family="Helvetica, Arial, sans-serif" font-size="12">Håndlaget på øyet (diagnostikk)</text>
+<polyline fill="none" stroke="#e377c2" stroke-width="1.5" points="66.1,291.7 107.3,266.5 161.2,260.2 214.1,255.6 263.2,227.8 308.4,126.7"/>
+<circle cx="66.1" cy="291.7" r="7.0" fill="#e377c2" fill-opacity="0.7"/>
+<circle cx="107.3" cy="266.5" r="4.9" fill="#e377c2" fill-opacity="0.7"/>
+<circle cx="161.2" cy="260.2" r="3.6" fill="#e377c2" fill-opacity="0.7"/>
+<circle cx="214.1" cy="255.6" r="3.1" fill="#e377c2" fill-opacity="0.7"/>
+<circle cx="263.2" cy="227.8" r="2.7" fill="#e377c2" fill-opacity="0.7"/>
+<circle cx="308.4" cy="126.7" r="2.3" fill="#e377c2" fill-opacity="0.7"/>
+<circle cx="348" cy="166" r="4" fill="#e377c2"/>
+<text x="358" y="170" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 6: syn</text>
 </svg>

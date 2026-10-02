@@ -1,4 +1,4 @@
-# Steg 5: evaluering i det ekte miljøet
+# Evaluering i det ekte miljøet
 
 Alle policyer spilte de samme 2000 nye brettene (seeds 200000–201999), som ingen av dem har sett under trening. Tallene i parentes er 95 %-intervaller (Wilson for rater, bootstrap for avkastning). Policyer merket *juks* leser miljøets indre tilstand og er målestokker, ikke konkurrenter.
 
@@ -18,6 +18,8 @@ Generert av `python -m worldmodels.evaluation`. Tolkningen står i README.
 | Steg 4c: mål-bevisst drøm | 9,9 % (9 %–11 %) | 46,4 % (44 %–49 %) | 43,7 % (42 %–46 %) | −0,62 (−0,64 – −0,59) | 25,9 |
 | Steg 4d: bedre søk | 42,7 % (41 %–45 %) | 53,9 % (52 %–56 %) | 3,4 % (3 %–4 %) | −0,19 (−0,23 – −0,14) | 8,5 |
 | Steg 4e: unngå hindringer | 40,8 % (39 %–43 %) | 31,9 % (30 %–34 %) | 27,3 % (25 %–29 %) | −0,12 (−0,15 – −0,08) | 21,4 |
+| Håndlaget på øyet (diagnostikk) | 61,4 % (59 %–63 %) | 34,2 % (32 %–36 %) | 4,4 % (4 %–5 %) | 0,22 (0,18 – 0,26) | 6,3 |
+| Steg 6: syn | 28,2 % (26 %–30 %) | 24,7 % (23 %–27 %) | 47,0 % (45 %–49 %) | −0,23 (−0,26 – −0,20) | 27,3 |
 
 ![Utfall](outcomes.svg)
 
@@ -31,8 +33,10 @@ Forskjell i prosentpoeng (a − b). «Bare a» er brett der a lyktes og b ikke, 
 | Steg 4c: mål-bevisst drøm | Steg 4b: iterativ trening | +4,2 (+2,7 til +5,7) | 166 / 81 | +18,4 (+15,7 til +21,2) |
 | Steg 4d: bedre søk | Steg 4c: mål-bevisst drøm | +32,8 (+30,5 til +35,0) | 736 / 80 | +7,5 (+4,5 til +10,5) |
 | Steg 4e: unngå hindringer | Steg 4d: bedre søk | −1,8 (−4,3 til +0,7) | 309 / 346 | −22,1 (−24,7 til −19,4) |
-| Steg 4e: unngå hindringer | Tilfeldig | +28,0 (+25,6 til +30,5) | 674 / 114 | −48,6 (−51,0 til −46,1) |
-| Steg 4e: unngå hindringer | Rett mot målet, unngår hindringer (juks) | −57,6 (−59,7 til −55,4) | 3 / 1155 | +31,9 (+29,8 til +34,0) |
+| Steg 6: syn | Steg 4e: unngå hindringer | −12,6 (−15,1 til −10,2) | 193 / 445 | −7,2 (−9,4 til −5,0) |
+| Steg 6: syn | Tilfeldig | +15,4 (+13,0 til +17,6) | 462 / 154 | −55,8 (−58,1 til −53,3) |
+| Steg 6: syn | Rett mot målet, unngår hindringer (juks) | −70,2 (−72,2 til −68,2) | 2 / 1406 | +24,7 (+22,8 til +26,7) |
+| Steg 6: syn | Håndlaget på øyet (diagnostikk) | −33,1 (−35,5 til −30,7) | 103 / 765 | −9,6 (−11,6 til −7,4) |
 
 ## Etter avstand til målet
 
@@ -51,6 +55,8 @@ Målrate etter korteste vei fra start til mål (rundt hindringene).
 | Steg 4c: mål-bevisst drøm | 23 % | 8 % | 4 % | 3 % |
 | Steg 4d: bedre søk | 58 % | 45 % | 36 % | 30 % |
 | Steg 4e: unngå hindringer | 57 % | 41 % | 36 % | 27 % |
+| Håndlaget på øyet (diagnostikk) | 87 % | 65 % | 54 % | 36 % |
+| Steg 6: syn | 44 % | 28 % | 20 % | 18 % |
 
 ![Mål etter avstand](goal_by_distance.svg)
 
@@ -70,6 +76,8 @@ Målrate etter korteste vei fra start til mål (rundt hindringene).
 | Steg 4c: mål-bevisst drøm | 19 % | 3 % | 39 % | 52 % |
 | Steg 4d: bedre søk | 63 % | 27 % | 32 % | 71 % |
 | Steg 4e: unngå hindringer | 57 % | 28 % | 17 % | 43 % |
+| Håndlaget på øyet (diagnostikk) | 92 % | 37 % | 3 % | 59 % |
+| Steg 6: syn | 43 % | 17 % | 7 % | 38 % |
 
 ## Hvordan episodene ender
 
@@ -87,31 +95,45 @@ Pendling: avkortet, og innom høyst 3 ulike celler de siste 20 skrittene. Effekt
 | Steg 4c: mål-bevisst drøm | 874 | 746 | 0,70 | 286 | 451 | 191 |
 | Steg 4d: bedre søk | 67 | 26 | 0,66 | 263 | 661 | 155 |
 | Steg 4e: unngå hindringer | 545 | 348 | 0,55 | 187 | 275 | 176 |
+| Håndlaget på øyet (diagnostikk) | 88 | 86 | 0,98 | 323 | 352 | 10 |
+| Steg 6: syn | 941 | 911 | 0,74 | 215 | 214 | 65 |
 
 ## Vet M hvor agenten og målet er?
 
-Mens agenten spiller: andel skritt der M sin tro peker på riktig celle, og snittfeil i celler. Skritt 0 er før agenten har sett noe som helst; troen der er det M gjetter med tomt minne.
+Mens agenten spiller: andel skritt der M sin tro peker på riktig celle, og snittfeil i celler. Kilde «minne»: troen M leser fra h før bildet er sett, så skritt 0 er en gjetning med tomt minne. Kilde «øye»: det øyet leser fra bildet i samme skritt (steg 6).
 
-| Agent | Skritt | Agent riktig | Agent feil (celler) | Mål riktig | Mål feil (celler) | Episoder |
-|---|---|---:|---:|---:|---:|---:|
-| Steg 4c: mål-bevisst drøm | 0 | 1 % | 4,0 | 1 % | 4,0 | 2000 |
-| Steg 4c: mål-bevisst drøm | 1 | 4 % | 3,1 | 16 % | 2,4 | 1802 |
-| Steg 4c: mål-bevisst drøm | 2 | 34 % | 1,6 | 33 % | 1,8 | 1658 |
-| Steg 4c: mål-bevisst drøm | 5 | 83 % | 0,3 | 44 % | 1,5 | 1344 |
-| Steg 4c: mål-bevisst drøm | 10 | 92 % | 0,1 | 44 % | 1,5 | 1075 |
-| Steg 4c: mål-bevisst drøm | alle | 82 % | 0,5 | 40 % | 1,6 | 51732 |
-| Steg 4d: bedre søk | 0 | 1 % | 4,0 | 1 % | 4,0 | 2000 |
-| Steg 4d: bedre søk | 1 | 4 % | 3,2 | 17 % | 2,3 | 1811 |
-| Steg 4d: bedre søk | 2 | 25 % | 2,1 | 30 % | 1,9 | 1686 |
-| Steg 4d: bedre søk | 5 | 72 % | 0,6 | 39 % | 1,7 | 1138 |
-| Steg 4d: bedre søk | 10 | 78 % | 0,4 | 20 % | 2,4 | 341 |
-| Steg 4d: bedre søk | alle | 50 % | 1,4 | 22 % | 2,4 | 16909 |
-| Steg 4e: unngå hindringer | 0 | 1 % | 4,0 | 1 % | 4,0 | 2000 |
-| Steg 4e: unngå hindringer | 1 | 4 % | 3,2 | 17 % | 2,3 | 1839 |
-| Steg 4e: unngå hindringer | 2 | 37 % | 1,5 | 32 % | 1,8 | 1768 |
-| Steg 4e: unngå hindringer | 5 | 73 % | 0,5 | 39 % | 1,7 | 1504 |
-| Steg 4e: unngå hindringer | 10 | 81 % | 0,3 | 33 % | 2,0 | 1005 |
-| Steg 4e: unngå hindringer | alle | 66 % | 0,8 | 26 % | 2,2 | 42784 |
+| Agent | Kilde | Skritt | Agent riktig | Agent feil (celler) | Mål riktig | Mål feil (celler) | Episoder |
+|---|---|---|---:|---:|---:|---:|---:|
+| Steg 4c: mål-bevisst drøm | minne | 0 | 1 % | 4,0 | 1 % | 4,0 | 2000 |
+| Steg 4c: mål-bevisst drøm | minne | 1 | 4 % | 3,1 | 16 % | 2,4 | 1802 |
+| Steg 4c: mål-bevisst drøm | minne | 2 | 34 % | 1,6 | 33 % | 1,8 | 1658 |
+| Steg 4c: mål-bevisst drøm | minne | 5 | 83 % | 0,3 | 44 % | 1,5 | 1344 |
+| Steg 4c: mål-bevisst drøm | minne | 10 | 92 % | 0,1 | 44 % | 1,5 | 1075 |
+| Steg 4c: mål-bevisst drøm | minne | alle | 82 % | 0,5 | 40 % | 1,6 | 51732 |
+| Steg 4d: bedre søk | minne | 0 | 1 % | 4,0 | 1 % | 4,0 | 2000 |
+| Steg 4d: bedre søk | minne | 1 | 4 % | 3,2 | 17 % | 2,3 | 1811 |
+| Steg 4d: bedre søk | minne | 2 | 25 % | 2,1 | 30 % | 1,9 | 1686 |
+| Steg 4d: bedre søk | minne | 5 | 72 % | 0,6 | 39 % | 1,7 | 1138 |
+| Steg 4d: bedre søk | minne | 10 | 78 % | 0,4 | 20 % | 2,4 | 341 |
+| Steg 4d: bedre søk | minne | alle | 50 % | 1,4 | 22 % | 2,4 | 16909 |
+| Steg 4e: unngå hindringer | minne | 0 | 1 % | 4,0 | 1 % | 4,0 | 2000 |
+| Steg 4e: unngå hindringer | minne | 1 | 4 % | 3,2 | 17 % | 2,3 | 1839 |
+| Steg 4e: unngå hindringer | minne | 2 | 37 % | 1,5 | 32 % | 1,8 | 1768 |
+| Steg 4e: unngå hindringer | minne | 5 | 73 % | 0,5 | 39 % | 1,7 | 1504 |
+| Steg 4e: unngå hindringer | minne | 10 | 81 % | 0,3 | 33 % | 2,0 | 1005 |
+| Steg 4e: unngå hindringer | minne | alle | 66 % | 0,8 | 26 % | 2,2 | 42784 |
+| Håndlaget på øyet (diagnostikk) | øye | 0 | 93 % | 0,2 | 89 % | 0,3 | 2000 |
+| Håndlaget på øyet (diagnostikk) | øye | 1 | 92 % | 0,2 | 95 % | 0,2 | 1729 |
+| Håndlaget på øyet (diagnostikk) | øye | 2 | 92 % | 0,2 | 94 % | 0,2 | 1422 |
+| Håndlaget på øyet (diagnostikk) | øye | 5 | 84 % | 0,4 | 93 % | 0,2 | 642 |
+| Håndlaget på øyet (diagnostikk) | øye | 10 | 46 % | 1,7 | 76 % | 0,8 | 122 |
+| Håndlaget på øyet (diagnostikk) | øye | alle | 71 % | 0,9 | 86 % | 0,4 | 12507 |
+| Steg 6: syn | øye | 0 | 93 % | 0,2 | 89 % | 0,3 | 2000 |
+| Steg 6: syn | øye | 1 | 93 % | 0,2 | 94 % | 0,1 | 1814 |
+| Steg 6: syn | øye | 2 | 94 % | 0,2 | 94 % | 0,2 | 1705 |
+| Steg 6: syn | øye | 5 | 89 % | 0,3 | 95 % | 0,1 | 1405 |
+| Steg 6: syn | øye | 10 | 86 % | 0,4 | 94 % | 0,2 | 1115 |
+| Steg 6: syn | øye | alle | 87 % | 0,3 | 92 % | 0,2 | 54565 |
 
 ## Drøm mot virkelighet
 
@@ -124,6 +146,8 @@ Etter 5 ekte skritt drømmer agenten 10 skritt videre fra nøyaktig den tilstand
 | Steg 4c: mål-bevisst drøm | 1344 | 11,9 % | 4,2 % (3 %–5 %) | 0,85 | 27,3 % | 22,2 % (20 %–25 %) | 0,87 |
 | Steg 4d: bedre søk | 1138 | 30,8 % | 49,8 % (47 %–53 %) | 0,65 | 57,0 % | 34,3 % (32 %–37 %) | 0,71 |
 | Steg 4e: unngå hindringer | 1504 | 35,4 % | 32,0 % (30 %–34 %) | 0,68 | 18,9 % | 13,2 % (12 %–15 %) | 0,70 |
+| Håndlaget på øyet (diagnostikk) | 642 | 27,9 % | 68,8 % (65 %–72 %) | 0,67 | 45,0 % | 17,0 % (14 %–20 %) | 0,71 |
+| Steg 6: syn | 1405 | 19,7 % | 18,8 % (17 %–21 %) | 0,73 | 11,2 % | 7,0 % (6 %–8 %) | 0,75 |
 
 ![Drøm mot virkelighet, mål](dream_goal.svg)
 
@@ -131,7 +155,7 @@ Etter 5 ekte skritt drømmer agenten 10 skritt videre fra nøyaktig den tilstand
 
 ## Episoder fra sluttagenten
 
-Steg 4e: unngå hindringer. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.
+Steg 6: syn. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.
 
 ![Veier](final_paths.png)
 
@@ -141,6 +165,6 @@ Den første episoden av hvert utfall, skritt for skritt (16 første bilder):
 
 ## Samme brett, to agenter
 
-Brett der Steg 4d: bedre søk (øverst) krasjet og Steg 4e: unngå hindringer (nederst) kom frem.
+Brett der Steg 4e: unngå hindringer (øverst) krasjet og Steg 6: syn (nederst) kom frem.
 
 ![Sammenligning](compare_paths.png)
