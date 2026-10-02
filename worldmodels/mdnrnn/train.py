@@ -13,7 +13,7 @@ import argparse
 import copy
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +32,7 @@ class Batch:
     events: torch.Tensor     # (B, T)
     agent_cell: torch.Tensor # (B, T+1)
     goal_cell: torch.Tensor  # (B, T+1), -1 der den er ukjent
+    near_obstacle: torch.Tensor  # (B, T+1, 4), -1 der det er ukjent
     mask: torch.Tensor       # (B, T) True for ekte skritt, False for utfylling
 
     def inputs(self, sample: bool, generator: torch.Generator | None = None) -> torch.Tensor:
@@ -57,6 +58,7 @@ def make_batch(seqs: ZSequences, indices) -> Batch:
     events = np.zeros((B, T), np.int64)
     agent = np.full((B, T + 1), -1, np.int64)
     goal = np.full((B, T + 1), -1, np.int64)
+    near = np.full((B, T + 1, eps[0]["near_obstacle"].shape[-1]), -1, np.int64)
     mask = np.zeros((B, T), bool)
     for b, e in enumerate(eps):
         n = len(e["actions"])
@@ -66,9 +68,10 @@ def make_batch(seqs: ZSequences, indices) -> Batch:
         events[b, :n] = e["events"]
         agent[b, :n + 1] = e["agent_cell"]
         goal[b, :n + 1] = e["goal_cell"]
+        near[b, :n + 1] = e["near_obstacle"]
         mask[b, :n] = True
     t = torch.from_numpy
-    return Batch(t(z_mu), t(z_logvar), t(actions), t(events), t(agent), t(goal), t(mask))
+    return Batch(t(z_mu), t(z_logvar), t(actions), t(events), t(agent), t(goal), t(near), t(mask))
 
 
 def split_indices(n: int, val_fraction: float = 0.1, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
@@ -106,6 +109,7 @@ def batch_loss(
     class_weights: torch.Tensor | None = None,
     mse_weight: float = 0.0,
     position_weight: float = 0.0,
+    obstacle_weight: float = 0.0,
 ) -> dict[str, torch.Tensor]:
     """nll + event_weight * hendelsestap + mse_weight * kvadratfeil for forventet z_{t+1}.
 
@@ -120,8 +124,18 @@ def batch_loss(
     expected = (F.softmax(out.logit_pi, dim=-1).unsqueeze(-1) * out.mu).sum(2)
     mse = ((expected - batch.targets) ** 2)[m].mean()
     position = position_loss(out, batch) if out.position_logits is not None else torch.zeros(())
-    loss = nll + event_weight * ce + mse_weight * mse + position_weight * position
-    return {"loss": loss, "nll": nll, "event_ce": ce, "mse": mse, "position_ce": position}
+    obstacle = obstacle_loss(out, batch) if out.obstacle_logits is not None else torch.zeros(())
+    loss = nll + event_weight * ce + mse_weight * mse + position_weight * position + obstacle_weight * obstacle
+    return {"loss": loss, "nll": nll, "event_ce": ce, "mse": mse, "position_ce": position, "obstacle_bce": obstacle}
+
+
+def obstacle_loss(out, batch: Batch) -> torch.Tensor:
+    """Binær kryssentropi for hindring i hver nabocelle etter skrittet. Ukjente (-1) hoppes over."""
+    target = batch.near_obstacle[:, 1:]
+    ok = batch.mask.unsqueeze(-1) & (target >= 0)
+    if not ok.any():
+        return torch.zeros(())
+    return F.binary_cross_entropy_with_logits(out.obstacle_logits[ok], target[ok].float())
 
 
 def position_loss(out, batch: Batch) -> torch.Tensor:
@@ -136,16 +150,17 @@ def position_loss(out, batch: Batch) -> torch.Tensor:
 
 def run_epoch(
     model, seqs, indices, opt, batch_size, event_weight, rng=None, class_weights=None, mse_weight=0.0,
-    position_weight=0.0,
+    position_weight=0.0, obstacle_weight=0.0,
 ) -> dict[str, float]:
     training = opt is not None
     model.train(training)
     order = rng.permutation(indices) if training else indices
-    totals, n = {"loss": 0.0, "nll": 0.0, "event_ce": 0.0, "mse": 0.0, "position_ce": 0.0}, 0
+    totals, n = {"loss": 0.0, "nll": 0.0, "event_ce": 0.0, "mse": 0.0, "position_ce": 0.0, "obstacle_bce": 0.0}, 0
     with torch.set_grad_enabled(training):
         for start in range(0, len(order), batch_size):
             batch = make_batch(seqs, order[start:start + batch_size])
-            parts = batch_loss(model, batch, training, event_weight, class_weights, mse_weight, position_weight)
+            parts = batch_loss(model, batch, training, event_weight, class_weights, mse_weight, position_weight,
+                               obstacle_weight)
             if training:
                 opt.zero_grad()
                 parts["loss"].backward()
@@ -172,6 +187,7 @@ def train(
     direct_path: bool = True,
     mse_weight: float = 10.0,
     position_weight: float = 0.0,
+    obstacle_weight: float = 0.0,
     goal_oversample: int = 1,
     init_from: str | Path | None = None,
     seed: int = 0,
@@ -188,10 +204,18 @@ def train(
     if init_from is not None:
         model, _ = MDNRNN.load(init_from)
         log(f"Fortsetter fra {init_from}")
+        # Nye hjelpehoder kan legges til en eksisterende modell; resten av vektene beholdes
+        wanted = replace(model.config, position_head=model.config.position_head or position_weight > 0,
+                         obstacle_head=model.config.obstacle_head or obstacle_weight > 0)
+        if wanted != model.config:
+            old = model.state_dict()
+            model = MDNRNN(wanted)
+            missing, _ = model.load_state_dict(old, strict=False)
+            log(f"La til nye hoder: {sorted({k.split('.')[0] for k in missing})}")
     else:
         model = MDNRNN(MDNRNNConfig(
             latent_dim=seqs.mu.shape[1], hidden_dim=hidden_dim, num_mixtures=num_mixtures, input_mlp=input_mlp,
-            direct_path=direct_path, position_head=position_weight > 0,
+            direct_path=direct_path, position_head=position_weight > 0, obstacle_head=obstacle_weight > 0,
         ))
     class_weights = event_class_weights(seqs.subset(train_idx).events) if balance_events else None
     if class_weights is not None:
@@ -205,9 +229,9 @@ def train(
     for epoch in range(1, epochs + 1):
         t0 = time.time()
         tr = run_epoch(model, seqs, epoch_idx, opt, batch_size, event_weight, rng, class_weights, mse_weight,
-                       position_weight)
+                       position_weight, obstacle_weight)
         va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight, None, class_weights, mse_weight,
-                       position_weight)
+                       position_weight, obstacle_weight)
         history.append({"epoch": epoch, "train": tr, "val": va})
         # Tidlig stopp på dynamikken alene. Hendelseshodet overtilpasser seg tidligere enn resten,
         # og ville ellers stoppet treningen før z-prediksjonen er ferdig lært.
@@ -218,7 +242,7 @@ def train(
         log(
             f"epoke {epoch:2d}  tren nll {tr['nll']:7.3f} hendelse {tr['event_ce']:.3f}  "
             f"mse {tr['mse']:.4f}  val nll {va['nll']:7.3f} hendelse {va['event_ce']:.3f} mse {va['mse']:.4f} "
-            f"posisjon {va['position_ce']:.3f}  "
+            f"posisjon {va['position_ce']:.3f} hindring {va['obstacle_bce']:.3f}  "
             f"[{time.time() - t0:.0f}s]"
         )
 
@@ -226,6 +250,7 @@ def train(
         "hidden_dim": hidden_dim, "num_mixtures": num_mixtures, "epochs": epochs, "batch_size": batch_size,
         "lr": lr, "event_weight": event_weight, "balance_events": balance_events, "input_mlp": input_mlp,
         "direct_path": direct_path, "mse_weight": mse_weight, "position_weight": position_weight,
+        "obstacle_weight": obstacle_weight,
         "goal_oversample": goal_oversample, "best_epoch": best_epoch,
         "seed": seed, "data": [str(d) for d in data] if isinstance(data, (list, tuple)) else str(data),
         "init_from": str(init_from) if init_from else None,
@@ -254,6 +279,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--no-direct-path", action="store_true", help="hodene ser bare h, som i artikkelen")
     p.add_argument("--position-weight", type=float, default=0.0,
                    help="vekt på hjelpehodet som lærer minnet hvor agent og mål er (0 = av)")
+    p.add_argument("--obstacle-weight", type=float, default=0.0,
+                   help="vekt på hjelpehodet for hindringer i nabocellene (0 = av)")
     p.add_argument("--goal-oversample", type=int, default=1, help="vis mål-episoder så mange ganger per epoke")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args(argv)
@@ -262,6 +289,7 @@ def main(argv: list[str] | None = None) -> None:
         batch_size=args.batch_size, lr=args.lr, event_weight=args.event_weight,
         balance_events=not args.no_balance_events, input_mlp=not args.linear_input,
         direct_path=not args.no_direct_path, mse_weight=args.mse_weight, position_weight=args.position_weight,
+        obstacle_weight=args.obstacle_weight,
         goal_oversample=args.goal_oversample, init_from=args.init_from, seed=args.seed,
     )
     print(json.dumps(result["history"][-1]))

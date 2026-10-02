@@ -281,3 +281,33 @@ def test_cma_zero_std_freezes_parameters():
         x = es.ask()
         es.tell(-((x - 3.0) ** 2).sum(1))
     assert np.allclose(es.theta[:2], 0.0)
+
+
+def test_lookahead_matches_running_each_action_and_keeps_state(world):
+    _, rnn, seqs = world
+    torch.manual_seed(0)
+    z = torch.randn(3, 4)
+    hidden = (torch.randn(1, 3, 8), torch.randn(1, 3, 8))
+    before = tuple(x.clone() for x in hidden)
+    p = rnn.lookahead_obstacle(z, hidden)
+    assert p.shape == (3, 4) and ((p >= 0) & (p <= 1)).all()
+    for a in range(4):
+        out = rnn(z.unsqueeze(1), torch.full((3, 1), a), hidden)
+        expected = torch.softmax(out.event_logits[:, 0], -1)[:, 2]
+        assert torch.allclose(p[:, a], expected, atol=1e-6)
+    assert all(torch.equal(x, y) for x, y in zip(hidden, before))
+
+
+def test_controller_with_lookahead_only_saves_flags_and_runs(world, tmp_path):
+    from worldmodels.controller.features import num_world_features
+
+    vae, rnn, seqs = world
+    extra = num_world_features(rnn, beliefs=False, lookahead=True)
+    c = LinearController(4, 8, extra_dim=extra, beliefs=False, lookahead=True)
+    c.save(tmp_path / "c.npz")
+    loaded = LinearController.load(tmp_path / "c.npz")
+    assert (loaded.beliefs, loaded.lookahead, loaded.extra_dim) == (False, True, 4)
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
+    pop = np.random.default_rng(0).normal(size=(2, c.num_params))
+    assert dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3)).shape == (2,)
+    assert run_real_episodes(WorldModelAgent(vae, rnn, loaded), num_episodes=2)["episodes"] == 2

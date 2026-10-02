@@ -32,6 +32,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 4b. Iterativ trening | `worldmodels/controller/iterate.py` | ⚠️ fjerner utnyttelsen av drømmen, ikke flere mål |
 | 4c. Mål-bevisst drøm | `worldmodels/mdnrnn`, `worldmodels/controller` | ⚠️ drømmen kjenner igjen målet, men søket finner det ikke |
 | 4d. Bedre søk | `worldmodels/controller/cma.py` | ✅ når målet i 41 %, men krasjer i 55 % |
+| 4e. Unngå hindringer | `worldmodels/controller/features.py` | ✅ krasj ned til 34 %, men pendler i 29 % |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ⏳ ikke påbegynt |
 
 ## Miljøet: GridDodge
@@ -150,6 +151,15 @@ python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data da
 python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data data/v2/zseq_*.npz \
     --use-positions --charge-remaining --temperature 0 --shaping 0.05 \
     --optimizer cma --sigma 0.5 --zh-std 0.03 --generations 300 --starts 256   # ~20 min
+```
+
+### Steg 4e: unngå hindringer
+
+```bash
+# Posisjonstro + fremsyn (M spør "hva skjer om jeg går hit?" for hver handling)
+python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data data/v2/zseq_*.npz \
+    --use-positions --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
+    --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256   # ~35 min
 ```
 
 ## Resultater fra steg 2
@@ -275,6 +285,21 @@ Vi lærte MDN-RNN-en å holde orden på hvor agenten og målet er, ga controller
 - **Neste svakhet er hindringer:** den går rett mot målet og krasjer i over halvparten av
   episodene. Se D36–D39.
 
+## Resultater fra steg 4e
+
+| Controller (ekte miljø, 1000 episoder) | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 11 % | 82 % | 7 % | −0,85 |
+| Steg 4d: posisjonstro | 41 % | 55 % | 4 % | −0,22 |
+| **Posisjonstro + fremsyn** | **38 %** | **34 %** | **29 %** | **−0,18** |
+
+- **Et hjelpehode for hindringer lærte lite** (AUC 0,76). Minnet holder ikke oversikt over dem.
+- **Fremsyn virket bedre.** For hver handling kjører M ett skritt frem og sier hvor sannsynlig et
+  krasj er (AUC 0,94). Controlleren får de 4 tallene og er fortsatt lineær, med 36 parametre.
+- **Krasjene falt fra 55 % til 34 %**, og avkastningen er den beste så langt.
+- **Men agenten pendler.** I over halvparten av de avkortede episodene går den til side for en
+  hindring og rett tilbake. En controller uten hukommelse om egne skritt kommer ikke rundt. Se D40–D42.
+
 ## Prosjektstruktur
 
 ```
@@ -283,7 +308,7 @@ worldmodels/
   data/         tilfeldig policy og innsamling/lagring av rollouts
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
   mdnrnn/       koding til z-sekvenser, MDN-RNN, trening og evaluering
-  controller/   lineær controller, ES og CMA-ES, drømmemiljø, kjøring i ekte miljø og iterativ trening
+  controller/   lineær controller og inndata, ES og CMA-ES, drømmemiljø, kjøring i ekte miljø, iterativ trening
 tests/          enhetstester (pytest)
 docs/           bilder til README, resultater og diagnoseskript fra eksperimenter
 decisions.md    logg over valg og begrunnelser
