@@ -35,6 +35,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 4e. Unngå hindringer | `worldmodels/controller/features.py` | ✅ krasj ned til 34 %, men pendler i 29 % |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ✅ ferdig: [rapport](docs/evaluation/report.md) |
 | 6. Bedre syn | `worldmodels/mdnrnn/eye.py` | ⚠️ øyet ser riktig, men drømmen tror ikke på det |
+| 7. Drømmen ser | `worldmodels/mdnrnn/neighbours.py` | ✅ når målet i 75 %, krasjer i 11 % |
 
 ## Miljøet: GridDodge
 
@@ -181,6 +182,18 @@ python -m worldmodels.mdnrnn.eye --rnn checkpoints/mdnrnn_pos.pt --data data/v3/
 python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_eye.pt --data data/v3/zseq_*.npz \
     --use-eye --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
     --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256 --out checkpoints/controller_eye_look.npz
+```
+
+### Steg 7: drømmen ser
+
+```bash
+# Nærsynet: spår mål og hindring i hver nabocelle fra bildet og øyets målminne (~9 min)
+python -m worldmodels.mdnrnn.neighbours --rnn checkpoints/mdnrnn_eye.pt --data data/v3/zseq_*.npz \
+    --out checkpoints/mdnrnn_sense.pt
+# Samme controlleroppsett som steg 6, men i drømmen som nå spår hendelser fra nærsynet (~75 min)
+python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_sense.pt --data data/v3/zseq_*.npz \
+    --use-eye --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
+    --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256 --seed 1 --out checkpoints/controller_sense.npz
 ```
 
 ## Resultater fra steg 2
@@ -389,6 +402,41 @@ bildet akkurat nå. Fordi målet står stille, husker øyet målet fra bilde til
   akkurat den strategien som virker, og søket finner noe forsiktig som pendler.
 - **Ny flaskehals: drømmen vet ikke det øyet vet.** Hendelsene i drømmen (mål, krasj) spås av M fra
   minnet h, som fortsatt ikke vet hvor målet er. Neste steg er å la M bruke øyet når den spår. Se D48–D51.
+
+## Resultater fra steg 7: drømmen ser
+
+Steg 6 ga agenten et øye, men drømmen spådde fortsatt mål og krasj fra minnet til M, som ikke visste
+hvor målet var. I steg 7 spår drømmen hendelsene med **nærsyn**: for hver retning ser øyet om målet
+eller en hindring står i nabocellen, ut fra bildet og minnet om målet.
+
+| Hvem spår hendelsen (valideringsepisoder) | Mål: treff | Mål: presisjon | Krasj: treff | Krasj: presisjon |
+|---|---:|---:|---:|---:|
+| Hendelseshodet på minnet h (før) | 30 % | 19 % | 70 % | 41 % |
+| **Nærsynet (steg 7)** | **85 %** | **94 %** | **77 %** | **95 %** |
+
+![Utfall](docs/evaluation/outcomes.svg)
+
+| Policy (2000 brett, 95 %-intervall) | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 13 % | 80 % | 7 % | −0,83 |
+| Steg 4e: unngå hindringer | 41 % | 32 % | 27 % | −0,12 |
+| Steg 6: syn | 28 % | 25 % | 47 % | −0,23 |
+| Håndlaget på øyet (diagnostikk) | 61 % | 34 % | 4 % | +0,22 |
+| **Steg 7: drømmen ser** | **75 % (73–77)** | **11 % (10–12)** | **14 %** | **+0,54** |
+| *Juks: mot målet, unngår hindringer* | 99 % | 0 % | 2 % | 0,92 |
+
+- **Den beste agenten i prosjektet, og den er lært i drømmen.** På de samme brettene når den målet
+  i 35 prosentpoeng flere episoder enn 4e, og krasjer i 21 poeng færre. Den slår også den
+  håndlagde regelen med 14 poeng.
+- **Drømmen er ærlig nå.** For sluttagenten lover drømmen 59 % mål og 10 % krasj innen 10 skritt;
+  i virkeligheten skjer 67 % og 5 %. I steg 6 lovet drømmen 28 % mål for en regel som fikk 69 %.
+- **Det som gjenstår:** 14 % av episodene ender med at agenten går frem og tilbake ved en hindring.
+  Juks-grunnlinjen viser at en controller uten minne kan komme nesten helt opp i 99 %, så det er
+  fortsatt rom. Se D52–D55.
+
+*Samme brett, to agenter: der steg 6 (øverst) krasjet og steg 7 (nederst) kom frem.*
+
+![Samme brett](docs/evaluation/compare_paths.png)
 
 ## Prosjektstruktur
 

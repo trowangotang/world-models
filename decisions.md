@@ -547,3 +547,55 @@ ikke drømmen å spå.
 
 Neste naturlige steg er derfor å la M bruke øyet når den spår hendelser, og så trene controlleren
 på nytt. Vi har ikke gjort det her, fordi det betyr å trene M på nytt. Det er et eget steg.
+
+## Steg 7: drømmen ser
+
+### D52. Nærsyn: hendelsene i drømmen spås fra bildet, ikke fra minnet
+Martin sa ja til å la M bruke øyet når den spår (D51). Det som avgjør hva som skjer når agenten
+tar en handling, er hva som står i nabocellen den veien. Nærsynet (`mdnrnn/neighbours.py`) svarer på
+nettopp det: for hver av de fire retningene, er målet der, og står det en hindring der?
+
+- **Inndata:** z (bildet nå), øyets minne om målet som et 8x8-kart, og øyets kart over hvor agenten er.
+- **Oppbygning:** som øyet (z → 4x4 → 8x8), pluss målkartet som ekstra kanal, to konvolusjonslag og
+  ett kart per retning og spørsmål ("om agenten står her, hva er ved siden av?"). Kartet leses av
+  der øyet ser agenten. Et første forsøk som selv måtte finne agenten (maksimum over kartet), lærte
+  ingenting på seks epoker; med øyets agentkart lærte det på én.
+- **Merkelapper for alle retninger:** hvert bilde sier hva som er i alle fire nabocellene, ikke bare
+  den agenten gikk til. Det gir mange flere eksempler enn hendelsene alene. Merkelappene kommer fra
+  fargene i bildet, som før (D32).
+- **Kalibrert:** vanlig binær kryssentropi uten vekting. Hendelseshodet til M ble trent med vektede
+  klasser (standard i `mdnrnn.train`, se D21), og spådde dobbelt så mange krasj som det som skjedde (7,5 % mot 3,7 % av skrittene).
+  Drømmen regner med sannsynlighetene som de er, så de må stemme.
+
+I drømmen erstatter nærsynet hendelseshodet (`MDNRNN.event_probs`), og fremsynet til controlleren
+leses fra samme sted, slik at controlleren og drømmen er enige. Dynamikken (neste z) kommer fortsatt
+fra M. Nærsynet ble trent i 8 epoker med resten av M fryst (`mdnrnn_sense.pt`).
+
+### D53. Drømmen spår hendelser mye bedre
+På valideringsepisodene, for handlingen som faktisk ble tatt:
+
+| Hvem spår | Mål: treff / presisjon | Krasj: treff / presisjon | Snitt spådd mot ekte (mål, krasj) |
+|---|---:|---:|---:|
+| Hendelseshodet på h | 30 % / 19 % | 70 % / 41 % | 1,5 % mot 0,7 %, 7,5 % mot 3,7 % |
+| Nærsynet | 85 % / 94 % | 77 % / 95 % | 0,6 % mot 0,7 %, 3,0 % mot 3,7 % |
+
+I den nye drømmen er rangeringen riktig: den håndlagde regelen med fremsyn får fitness +0,31, mot
+−0,13 i steg 6, og ligger over controlleren fra steg 6 (+0,06).
+
+### D54. Resultat: 75 % mål og 11 % krasj
+Samme controlleroppsett som steg 6 (syn + fremsyn, 36 parametre, CMA-ES, formet belønning), trent i
+den nye drømmen med to frø. Ved siste kontroll under trening nådde frø 0 målet i 62 % og frø 1 i
+75 %. Vi valgte frø 1 fordi drømmen ga den høyest fitness (+0,26 mot +0,22), ikke ut fra
+evalueringsbrettene.
+
+På de samme 2000 brettene som i steg 5 og 6: **75 % mål, 11 % krasj, 14 % avkortet, avkastning
++0,54**. Parvis mot 4e: +35 poeng mål og −21 poeng krasj. Mot den håndlagde regelen på øyet:
++14 poeng mål. Drøm mot virkelighet: drømmen lover 59 % mål og 10 % krasj innen 10 skritt, og 67 %
+og 5 % skjer. Drømmen er fortsatt litt forsiktig, men rangerer riktig.
+
+### D55. Det som gjenstår
+- **Pendling ved hindringer:** 266 av 271 avkortede episoder er pendling. Juks-grunnlinjen uten
+  minne når 99 %, så en bedre controller kan fortsatt komme mye lenger.
+- **Lange avstander:** 86 % mål når målet er 1–3 skritt unna, 62 % ved 8 eller flere.
+- **Øyet mister agenten over tid:** agenten ses riktig i 92 % av de første skrittene, men 67 % etter
+  10 skritt. De lange episodene er der agenten står inntil hindringer, som VAE-en tegner utydelig.
