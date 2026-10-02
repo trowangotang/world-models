@@ -21,6 +21,8 @@ Generert av `python -m worldmodels.evaluation`. Tolkningen står i README.
 | Håndlaget på øyet (diagnostikk) | 61,4 % (59 %–63 %) | 34,2 % (32 %–36 %) | 4,4 % (4 %–5 %) | 0,22 (0,18 – 0,26) | 6,3 |
 | Steg 6: syn | 28,2 % (26 %–30 %) | 24,7 % (23 %–27 %) | 47,0 % (45 %–49 %) | −0,23 (−0,26 – −0,20) | 27,3 |
 | Steg 7: drømmen ser | 75,4 % (73 %–77 %) | 11,1 % (10 %–12 %) | 13,6 % (12 %–15 %) | 0,54 (0,51 – 0,57) | 11,2 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | 89,8 % (88 %–91 %) | 10,1 % (9 %–11 %) | 0,1 % (0 %–0 %) | 0,75 (0,72 – 0,78) | 5,5 |
+| Steg 8: sporing | 92,7 % (91 %–94 %) | 7,0 % (6 %–8 %) | 0,3 % (0 %–1 %) | 0,81 (0,79 – 0,83) | 5,7 |
 
 ![Utfall](outcomes.svg)
 
@@ -36,9 +38,11 @@ Forskjell i prosentpoeng (a − b). «Bare a» er brett der a lyktes og b ikke, 
 | Steg 4e: unngå hindringer | Steg 4d: bedre søk | −1,8 (−4,3 til +0,7) | 309 / 346 | −22,1 (−24,7 til −19,4) |
 | Steg 6: syn | Steg 4e: unngå hindringer | −12,6 (−15,1 til −10,2) | 193 / 445 | −7,2 (−9,4 til −5,0) |
 | Steg 7: drømmen ser | Steg 6: syn | +47,1 (+44,7 til +49,6) | 1004 / 61 | −13,7 (−15,5 til −11,8) |
-| Steg 7: drømmen ser | Tilfeldig | +62,5 (+60,2 til +64,8) | 1288 / 37 | −69,5 (−71,5 til −67,3) |
-| Steg 7: drømmen ser | Rett mot målet, unngår hindringer (juks) | −23,1 (−24,9 til −21,2) | 4 / 465 | +11,1 (+9,8 til +12,4) |
-| Steg 7: drømmen ser | Håndlaget på øyet (diagnostikk) | +14,1 (+11,9 til +16,2) | 403 / 122 | −23,2 (−25,2 til −21,2) |
+| Steg 8: sporing | Steg 7: drømmen ser | +17,2 (+15,4 til +19,1) | 369 / 24 | −4,0 (−5,3 til −2,8) |
+| Steg 8: sporing | Tilfeldig | +79,8 (+78,0 til +81,5) | 1600 / 4 | −73,5 (−75,3 til −71,4) |
+| Steg 8: sporing | Rett mot målet, unngår hindringer (juks) | −5,8 (−7,0 til −4,8) | 9 / 125 | +7,0 (+6,1 til +8,2) |
+| Steg 8: sporing | Håndlaget på øyet (diagnostikk) | +31,3 (+29,3 til +33,4) | 634 / 8 | −27,2 (−29,1 til −25,1) |
+| Steg 8: sporing | Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | +2,9 (+2,0 til +3,8) | 76 / 18 | −3,0 (−4,0 til −2,1) |
 
 ## Etter avstand til målet
 
@@ -60,6 +64,8 @@ Målrate etter korteste vei fra start til mål (rundt hindringene).
 | Håndlaget på øyet (diagnostikk) | 87 % | 65 % | 54 % | 36 % |
 | Steg 6: syn | 44 % | 28 % | 20 % | 18 % |
 | Steg 7: drømmen ser | 86 % | 79 % | 72 % | 62 % |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | 98 % | 93 % | 86 % | 80 % |
+| Steg 8: sporing | 97 % | 95 % | 92 % | 85 % |
 
 ![Mål etter avstand](goal_by_distance.svg)
 
@@ -82,6 +88,8 @@ Målrate etter korteste vei fra start til mål (rundt hindringene).
 | Håndlaget på øyet (diagnostikk) | 92 % | 37 % | 3 % | 59 % |
 | Steg 6: syn | 43 % | 17 % | 7 % | 38 % |
 | Steg 7: drømmen ser | 89 % | 64 % | 2 % | 18 % |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | 99 % | 83 % | 1 % | 17 % |
+| Steg 8: sporing | 99 % | 88 % | 1 % | 12 % |
 
 ## Hvordan episodene ender
 
@@ -102,6 +110,8 @@ Pendling: avkortet, og innom høyst 3 ulike celler de siste 20 skrittene. Effekt
 | Håndlaget på øyet (diagnostikk) | 88 | 86 | 0,98 | 323 | 352 | 10 |
 | Steg 6: syn | 941 | 911 | 0,74 | 215 | 214 | 65 |
 | Steg 7: drømmen ser | 271 | 266 | 0,97 | 102 | 112 | 7 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | 3 | 0 | 0,96 | 114 | 72 | 16 |
+| Steg 8: sporing | 6 | 0 | 0,96 | 76 | 50 | 15 |
 
 ## Vet M hvor agenten og målet er?
 
@@ -145,6 +155,18 @@ Mens agenten spiller: andel skritt der M sin tro peker på riktig celle, og snit
 | Steg 7: drømmen ser | øye | 5 | 83 % | 0,4 | 93 % | 0,2 | 974 |
 | Steg 7: drømmen ser | øye | 10 | 67 % | 0,8 | 85 % | 0,5 | 343 |
 | Steg 7: drømmen ser | øye | alle | 74 % | 0,7 | 88 % | 0,4 | 22397 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | øye + sporing | 0 | 92 % | 0,2 | 89 % | 0,3 | 2000 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | øye + sporing | 1 | 99 % | 0,0 | 94 % | 0,2 | 1830 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | øye + sporing | 2 | 99 % | 0,0 | 94 % | 0,2 | 1639 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | øye + sporing | 5 | 100 % | 0,0 | 94 % | 0,1 | 889 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | øye + sporing | 10 | 100 % | 0,0 | 81 % | 0,6 | 122 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | øye + sporing | alle | 98 % | 0,0 | 91 % | 0,3 | 10995 |
+| Steg 8: sporing | øye + sporing | 0 | 92 % | 0,2 | 89 % | 0,3 | 2000 |
+| Steg 8: sporing | øye + sporing | 1 | 98 % | 0,0 | 94 % | 0,2 | 1849 |
+| Steg 8: sporing | øye + sporing | 2 | 99 % | 0,0 | 95 % | 0,2 | 1682 |
+| Steg 8: sporing | øye + sporing | 5 | 100 % | 0,0 | 94 % | 0,2 | 929 |
+| Steg 8: sporing | øye + sporing | 10 | 98 % | 0,0 | 78 % | 0,6 | 120 |
+| Steg 8: sporing | øye + sporing | alle | 98 % | 0,0 | 90 % | 0,3 | 11349 |
 
 ## Drøm mot virkelighet
 
@@ -159,7 +181,9 @@ Etter 5 ekte skritt drømmer agenten 10 skritt videre fra nøyaktig den tilstand
 | Steg 4e: unngå hindringer | 1504 | 35,4 % | 32,0 % (30 %–34 %) | 0,68 | 18,9 % | 13,2 % (12 %–15 %) | 0,70 |
 | Håndlaget på øyet (diagnostikk) | 642 | 27,9 % | 68,8 % (65 %–72 %) | 0,67 | 45,0 % | 17,0 % (14 %–20 %) | 0,71 |
 | Steg 6: syn | 1405 | 19,7 % | 18,8 % (17 %–21 %) | 0,73 | 11,2 % | 7,0 % (6 %–8 %) | 0,75 |
-| Steg 7: drømmen ser | 974 | 59,0 % | 66,7 % (64 %–70 %) | 0,71 | 9,7 % | 4,9 % (4 %–6 %) | 0,69 |
+| Steg 7: drømmen ser | 974 | 56,7 % | 66,7 % (64 %–70 %) | 0,71 | 14,6 % | 4,9 % (4 %–6 %) | 0,82 |
+| Steg 7 + sporing, håndlagt besøksvekt (diagnostikk) | 889 | 94,9 % | 93,9 % (92 %–95 %) | 0,89 | 3,9 % | 4,0 % (3 %–6 %) | 0,93 |
+| Steg 8: sporing | 929 | 95,3 % | 94,8 % (93 %–96 %) | 0,88 | 3,3 % | 2,7 % (2 %–4 %) | 0,91 |
 
 ![Drøm mot virkelighet, mål](dream_goal.svg)
 
@@ -167,7 +191,7 @@ Etter 5 ekte skritt drømmer agenten 10 skritt videre fra nøyaktig den tilstand
 
 ## Episoder fra sluttagenten
 
-Steg 7: drømmen ser. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.
+Steg 8: sporing. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.
 
 ![Veier](final_paths.png)
 
@@ -177,6 +201,6 @@ Den første episoden av hvert utfall, skritt for skritt (16 første bilder):
 
 ## Samme brett, to agenter
 
-Brett der Steg 6: syn (øverst) krasjet og Steg 7: drømmen ser (nederst) kom frem.
+Brett der Steg 7: drømmen ser (øverst) ble avkortet og Steg 8: sporing (nederst) kom frem.
 
 ![Sammenligning](compare_paths.png)
