@@ -28,3 +28,10 @@ checkpointene og dataene fra steg 4b og 4c (se README og decisions.md D31–D35)
 | `perception_probe.py` | Hvor godt agent og mål kan leses fra z med lineær, MLP og romlig leser (D48) |
 | `handcrafted_eye.py` | Håndlaget "gå mot målet" på øyet, med og uten fremsyn; lagrer diagnostikk-controlleren (D49, D50) |
 | `eye_dream_check.py` | Drømmens fitness for håndlaget og lærte controllere med syn (D51) |
+
+## Steg 7
+
+| Skript | Hva det viser |
+|---|---|
+| `event_sources.py` | Hendelseshodet på h mot nærsynet: treff, presisjon og kalibrering (D53) |
+| `eye_dream_check.py` | Med `EYE_RNN=checkpoints/mdnrnn_sense.pt`: rangeringen i den nye drømmen (D53) |

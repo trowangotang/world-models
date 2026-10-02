@@ -44,6 +44,7 @@ AGENTS = (
     ("Steg 4e: unngå hindringer", "mdnrnn_pos.pt", "controller_look_zh0.npz", False),
     ("Håndlaget på øyet (diagnostikk)", "mdnrnn_eye.pt", "controller_eye_handcrafted.npz", True),
     ("Steg 6: syn", "mdnrnn_eye.pt", "controller_eye_look.npz", False),
+    ("Steg 7: drømmen ser", "mdnrnn_sense.pt", "controller_sense.npz", False),
 )
 
 
