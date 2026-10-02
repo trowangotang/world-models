@@ -46,6 +46,7 @@ def train(
     init_from: str | Path | None = None,
     use_positions: bool = False,
     lookahead: bool = False,
+    sight: bool = False,
     charge_remaining: bool = False,
     shaping: float = 0.0,
     optimizer: str = "es",
@@ -65,9 +66,11 @@ def train(
 
     if use_positions and not rnn.num_belief_features:
         raise ValueError("use_positions krever en MDN-RNN med posisjonshode")
-    extra_dim = num_world_features(rnn, use_positions, lookahead)
+    if sight and rnn.eye is None:
+        raise ValueError("sight krever en MDN-RNN med øye (python -m worldmodels.mdnrnn.eye)")
+    extra_dim = num_world_features(rnn, use_positions, lookahead, sight)
     controller = LinearController(seqs.mu.shape[1], rnn.config.hidden_dim, rnn.config.num_actions, extra_dim,
-                                  beliefs=use_positions, lookahead=lookahead)
+                                  beliefs=use_positions, lookahead=lookahead, sight=sight)
     init = LinearController.load(init_from).params if init_from else None
     if init is not None:
         log(f"Fortsetter fra {init_from}")
@@ -83,7 +86,7 @@ def train(
         raise ValueError(f"ukjent optimizer: {optimizer}")
     remaining = max(0, GridConfig.max_steps - context - horizon) if charge_remaining else 0
     dream_cfg = DreamConfig(horizon=horizon, temperature=temperature, remaining_steps=remaining, shaping=shaping)
-    if shaping and not rnn.num_position_features:
+    if shaping and not (rnn.num_position_features or sight):
         raise ValueError("shaping krever en MDN-RNN med posisjonshode")
     # Fast sett med starter for å måle fremgang i drømmen på samme måte hver gang
     eval_starts = starts.sample(512, np.random.default_rng(seed + 1))
@@ -120,7 +123,7 @@ def train(
         "sigma": sigma, "lr": lr, "context": context, "horizon": horizon, "temperature": temperature, "seed": seed,
         "vae": str(vae_path), "rnn": str(rnn_path), "init_from": str(init_from) if init_from else None,
         "use_positions": use_positions, "remaining_steps": remaining, "shaping": shaping, "optimizer": optimizer,
-        "zh_std": zh_std, "lookahead": lookahead,
+        "zh_std": zh_std, "lookahead": lookahead, "sight": sight,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     controller.save(out, hparams=json.dumps(hparams))
@@ -149,6 +152,8 @@ def main(argv: list[str] | None = None) -> None:
                    help="gi controlleren M sin tro om hvor agent og mål er (krever posisjonshode)")
     p.add_argument("--lookahead", action="store_true",
                    help="gi controlleren M sitt fremsyn: sannsynlighet for hindring for hver handling")
+    p.add_argument("--use-eye", action="store_true",
+                   help="gi controlleren det øyet ser: agent og mål i bildet akkurat nå (krever M med øye)")
     p.add_argument("--charge-remaining", action="store_true",
                    help="den som overlever drømmen betaler skrittkostnaden for resten av en ekte episode")
     p.add_argument("--shaping", type=float, default=0.0,
@@ -162,7 +167,7 @@ def main(argv: list[str] | None = None) -> None:
         a.vae, a.rnn, a.data, a.out, generations=a.generations, population=a.population,
         starts_per_generation=a.starts, sigma=a.sigma, lr=a.lr, context=a.context, horizon=a.horizon,
         temperature=a.temperature, real_check_every=a.real_check_every, init_from=a.init_from,
-        use_positions=a.use_positions, lookahead=a.lookahead, charge_remaining=a.charge_remaining,
+        use_positions=a.use_positions, lookahead=a.lookahead, sight=a.use_eye, charge_remaining=a.charge_remaining,
         shaping=a.shaping, optimizer=a.optimizer, zh_std=a.zh_std, seed=a.seed,
     )
     if a.history:

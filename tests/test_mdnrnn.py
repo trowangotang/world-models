@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 import torch
+from torch.nn import functional as F
 
 from worldmodels.data import RandomPolicy, collect_rollouts, episode_paths, run_episode
 from worldmodels.env import GridDodgeEnv
@@ -285,3 +286,35 @@ def test_training_can_add_heads_to_existing_checkpoint(seqs, tmp_path):
     assert model.num_belief_features == 8
     f = model.belief_features(torch.randn(3, 8))
     assert f.shape == (3, 8) and (f[:, 4:] >= 0).all() and (f[:, 4:] <= 1).all()
+
+
+def test_eye_shapes_positions_and_learns_from_z():
+    from worldmodels.mdnrnn.eye import SpatialEye, expected_positions, eye_accuracy, train_eye
+
+    eye = SpatialEye(latent_dim=6, channels=8)
+    assert eye(torch.randn(5, 6)).shape == (5, 2, 64)
+    assert eye(torch.randn(2, 3, 6)).shape == (2, 3, 2, 64)
+    # Alt på én celle gir den cellens koordinater; jevn fordeling gir midten.
+    logits = torch.full((1, 2, 64), -1e4)
+    logits[0, 0, 0] = 0      # agent i (0, 0)
+    logits[0, 1, 63] = 0     # mål i (7, 7)
+    assert torch.allclose(expected_positions(logits, 8), torch.tensor([[-1.0, -1.0, 1.0, 1.0]]))
+    assert torch.allclose(expected_positions(torch.zeros(1, 2, 64), 8), torch.zeros(1, 4), atol=1e-6)
+    # Lærer en enkel avbildning: z er en one-hot-koding av radene og kolonnene.
+    g = torch.Generator().manual_seed(0)
+    cells = torch.randint(0, 64, (2000, 2), generator=g)
+    z = torch.cat([F.one_hot(cells[:, 0] // 8, 8), F.one_hot(cells[:, 0] % 8, 8), F.one_hot(cells[:, 1] // 8, 8),
+                   F.one_hot(cells[:, 1] % 8, 8)], 1).float()
+    eye = SpatialEye(latent_dim=32, channels=16)
+    train_eye(eye, (z[:1600], cells[:1600]), (z[1600:], cells[1600:]), epochs=15, lr=3e-3, batch=64, log=lambda m: None)
+    agent, goal = eye_accuracy(eye, z[1600:], cells[1600:])
+    assert agent > 0.9 and goal > 0.9
+
+
+def test_eye_is_saved_with_the_model(tmp_path):
+    m = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, eye=True, eye_channels=4))
+    m.save(tmp_path / "m.pt")
+    loaded, _ = MDNRNN.load(tmp_path / "m.pt")
+    z = torch.randn(3, 4)
+    assert torch.allclose(loaded.seen_positions(z), m.eval().seen_positions(z))
+    assert MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8)).eye is None

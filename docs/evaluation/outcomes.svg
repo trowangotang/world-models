@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="740" height="380" viewBox="0 0 740 380">
-<rect width="740" height="380" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="740" height="440" viewBox="0 0 740 440">
+<rect width="740" height="440" fill="white"/>
 <text x="10" y="24" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold">Hvordan episodene endte (2000 like brett)</text>
 <text x="292" y="58" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Tilfeldig</text>
 <rect x="300.0" y="44" width="54.0" height="22" fill="#3cb45a"/>
@@ -62,10 +62,23 @@
 <text x="538.6" y="329" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">32</text>
 <rect x="605.5" y="314" width="114.5" height="22" fill="#9aa0a6"/>
 <text x="662.8" y="329" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">27</text>
-<rect x="300" y="352" width="12" height="12" fill="#3cb45a"/>
-<text x="316" y="363" font-family="Helvetica, Arial, sans-serif" font-size="12">Mål (%)</text>
-<rect x="410" y="352" width="12" height="12" fill="#dc3c3c"/>
-<text x="426" y="363" font-family="Helvetica, Arial, sans-serif" font-size="12">Hindring (%)</text>
-<rect x="520" y="352" width="12" height="12" fill="#9aa0a6"/>
-<text x="536" y="363" font-family="Helvetica, Arial, sans-serif" font-size="12">Avkortet (%)</text>
+<text x="292" y="358" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Håndlaget på øyet (diagnostikk)</text>
+<rect x="300.0" y="344" width="257.7" height="22" fill="#3cb45a"/>
+<text x="428.8" y="359" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">61</text>
+<rect x="557.7" y="344" width="143.9" height="22" fill="#dc3c3c"/>
+<text x="629.6" y="359" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">34</text>
+<rect x="701.5" y="344" width="18.5" height="22" fill="#9aa0a6"/>
+<text x="292" y="388" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Steg 6: syn</text>
+<rect x="300.0" y="374" width="118.6" height="22" fill="#3cb45a"/>
+<text x="359.3" y="389" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">28</text>
+<rect x="418.6" y="374" width="103.7" height="22" fill="#dc3c3c"/>
+<text x="470.5" y="389" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">25</text>
+<rect x="522.4" y="374" width="197.6" height="22" fill="#9aa0a6"/>
+<text x="621.2" y="389" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">47</text>
+<rect x="300" y="412" width="12" height="12" fill="#3cb45a"/>
+<text x="316" y="423" font-family="Helvetica, Arial, sans-serif" font-size="12">Mål (%)</text>
+<rect x="410" y="412" width="12" height="12" fill="#dc3c3c"/>
+<text x="426" y="423" font-family="Helvetica, Arial, sans-serif" font-size="12">Hindring (%)</text>
+<rect x="520" y="412" width="12" height="12" fill="#9aa0a6"/>
+<text x="536" y="423" font-family="Helvetica, Arial, sans-serif" font-size="12">Avkortet (%)</text>
 </svg>

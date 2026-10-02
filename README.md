@@ -34,6 +34,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 4d. Bedre søk | `worldmodels/controller/cma.py` | ✅ når målet i 41 %, men krasjer i 55 % |
 | 4e. Unngå hindringer | `worldmodels/controller/features.py` | ✅ krasj ned til 34 %, men pendler i 29 % |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ✅ ferdig: [rapport](docs/evaluation/report.md) |
+| 6. Bedre syn | `worldmodels/mdnrnn/eye.py` | ⚠️ øyet ser riktig, men drømmen tror ikke på det |
 
 ## Miljøet: GridDodge
 
@@ -168,6 +169,18 @@ python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data da
 # Alle controllerne og fem grunnlinjer på de samme 2000 nye brettene (~4 min på 4 CPU-er).
 # Skriver docs/evaluation/report.md, results.json og figurene. Mangler et sjekkpunkt, hoppes det over.
 python -m worldmodels.evaluation --out docs/evaluation
+```
+
+### Steg 6: bedre syn
+
+```bash
+# Øyet: leser agentens og målets celle fra z, legges til M (~6 min)
+python -m worldmodels.mdnrnn.eye --rnn checkpoints/mdnrnn_pos.pt --data data/v3/zseq_*.npz \
+    --out checkpoints/mdnrnn_eye.pt
+# Controller på syn + fremsyn, samme oppsett som 4e (~45 min)
+python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_eye.pt --data data/v3/zseq_*.npz \
+    --use-eye --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
+    --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256 --out checkpoints/controller_eye_look.npz
 ```
 
 ## Resultater fra steg 2
@@ -350,6 +363,33 @@ sett før. Hele rapporten med intervaller, flere tabeller og bilder: [`docs/eval
 
 Se D43–D47 i [`decisions.md`](decisions.md).
 
+## Resultater fra steg 6: bedre syn
+
+Steg 5 viste at M bare visste hvor målet var i 26 % av skrittene. Steg 6 gir agenten et **øye**: en
+liten modell formet som starten på en dekoder, som leser agentens og målets celle fra z, altså fra
+bildet akkurat nå. Fordi målet står stille, husker øyet målet fra bilde til bilde.
+
+| Under spilling (2000 brett) | Agent riktig | Mål riktig | Første skritt |
+|---|---:|---:|---:|
+| Minnet til M (steg 4e) | 66 % | 26 % | 1 % / 1 % |
+| **Øyet (steg 6)** | **87 %** | **92 %** | **93 % / 89 %** |
+
+| Policy (2000 brett) | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Steg 4e: unngå hindringer | 41 % | 32 % | 27 % | −0,12 |
+| **Håndlaget «gå mot målet» på øyet** | **61 %** | 34 % | 4 % | **+0,22** |
+| Steg 6: lært på syn + fremsyn | 28 % | 25 % | 47 % | −0,23 |
+
+- **Synet er løst.** Øyet ser målet riktig i 92 % av skrittene, også i første skritt.
+- **Med øyet er en enkel regel den beste agenten så langt.** Fire tall fra øyet og en håndlaget
+  lineær regel gir positiv avkastning for første gang. Den er ikke lært, så den teller som
+  diagnostikk, ikke som et steg.
+- **Men den lærte controlleren ble dårligere enn 4e.** Drømmen tror den gode regelen når målet i
+  28 % og krasjer i 45 % av drømmene; i virkeligheten er det 69 % og 17 %. Drømmen straffer altså
+  akkurat den strategien som virker, og søket finner noe forsiktig som pendler.
+- **Ny flaskehals: drømmen vet ikke det øyet vet.** Hendelsene i drømmen (mål, krasj) spås av M fra
+  minnet h, som fortsatt ikke vet hvor målet er. Neste steg er å la M bruke øyet når den spår. Se D48–D51.
+
 ## Prosjektstruktur
 
 ```
@@ -357,7 +397,7 @@ worldmodels/
   env/          GridDodge-miljøet og forhåndsvisning
   data/         tilfeldig policy og innsamling/lagring av rollouts
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
-  mdnrnn/       koding til z-sekvenser, MDN-RNN, trening og evaluering
+  mdnrnn/       koding til z-sekvenser, MDN-RNN, øyet, trening og evaluering
   controller/   lineær controller og inndata, ES og CMA-ES, drømmemiljø, kjøring i ekte miljø, iterativ trening
   evaluation/   steg 5: grunnlinjer, evaluering med intervaller, drøm mot virkelighet, figurer og rapport
 tests/          enhetstester (pytest)

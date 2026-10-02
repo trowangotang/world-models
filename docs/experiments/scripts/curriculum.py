@@ -27,7 +27,7 @@ from worldmodels.controller.dream import WarmStarts
 def pick(n):
     k = n // 2
     i = np.concatenate([rng.choice(near_idx, k, replace=False), rng.choice(len(starts), n - k, replace=False)])
-    return WarmStarts(starts.z[i], starts.h[:, i], starts.c[:, i], starts.episodes[i])
+    return starts.subset(i)
 for g in range(1, 301):
     es.tell(dream_fitness(c, es.ask(), rnn, pick(256), cfg))
     if g % 50 == 0:

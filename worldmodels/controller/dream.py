@@ -41,13 +41,18 @@ class WarmStarts:
     h: torch.Tensor        # (1, N, H) LSTM-tilstand
     c: torch.Tensor        # (1, N, H)
     episodes: np.ndarray   # (N,) hvilke episoder startene kom fra
+    goal_memory: torch.Tensor | None = None  # (N, celler) øyets minne om målet fra oppvarmingen
 
     def __len__(self) -> int:
         return len(self.episodes)
 
     def sample(self, n: int, rng: np.random.Generator) -> "WarmStarts":
         idx = rng.choice(len(self), size=min(n, len(self)), replace=False)
-        return WarmStarts(self.z[idx], self.h[:, idx], self.c[:, idx], self.episodes[idx])
+        return self.subset(idx)
+
+    def subset(self, idx) -> "WarmStarts":
+        memory = None if self.goal_memory is None else self.goal_memory[idx]
+        return WarmStarts(self.z[idx], self.h[:, idx], self.c[:, idx], self.episodes[idx], memory)
 
 
 @torch.no_grad()
@@ -55,19 +60,30 @@ def make_warm_starts(model: MDNRNN, seqs: ZSequences, indices, context: int = 5,
     """Kjør RNN-en over de første `context` ekte skrittene av hver episode som varer så lenge."""
     model.eval()
     keep = np.array([i for i in indices if seqs.lengths[i] > context])
-    zs, hs, cs = [], [], []
+    zs, hs, cs, ms = [], [], [], []
     for start in range(0, len(keep), batch_size):
         b = make_batch(seqs, keep[start:start + batch_size])
         out = model(b.z_mu[:, :context], b.actions[:, :context])
         zs.append(most_likely_mean(out)[:, -1])
         hs.append(out.hidden[0])
         cs.append(out.hidden[1])
-    return WarmStarts(torch.cat(zs), torch.cat(hs, dim=1), torch.cat(cs, dim=1), keep)
+        if model.eye is not None:
+            # Øyet har sett de ekte oppvarmingsbildene og husker hvor målet var (D49).
+            memory = None
+            for t in range(context):
+                _, memory = model.see(b.z_mu[:, t], memory)
+            ms.append(memory)
+    memory = torch.cat(ms) if ms else None
+    return WarmStarts(torch.cat(zs), torch.cat(hs, dim=1), torch.cat(cs, dim=1), keep, memory)
 
 
 def goal_distance(model: MDNRNN, h: torch.Tensor) -> torch.Tensor:
     """Manhattan-avstand i celler mellom der M tror agenten og målet er. (B, H) -> (B,)"""
-    f = model.position_features(h)                       # [-1, 1], 8 celler per akse
+    return position_distance(model, model.position_features(h))
+
+
+def position_distance(model: MDNRNN, f: torch.Tensor) -> torch.Tensor:
+    """Manhattan-avstand i celler fra posisjoner (B, 4) i [-1, 1], 8 celler per akse."""
     cells_per_unit = (model.config.grid_cells ** 0.5 - 1) / 2
     return ((f[:, 0] - f[:, 2]).abs() + (f[:, 1] - f[:, 3]).abs()) * cells_per_unit
 
@@ -114,11 +130,24 @@ def dream_fitness(
     p_goal_sum = torch.zeros(P * B)
     p_obstacle_sum = torch.zeros(P * B)
     action_counts = torch.zeros(controller.num_actions)
-    use_shaping = config.shaping > 0 and model.num_position_features > 0
+    # Med syn måles avstanden i det øyet ser i drømmebildene, ellers i minnets tro.
+    eye_shaping = config.shaping > 0 and controller.sight
+    use_shaping = config.shaping > 0 and (eye_shaping or model.num_position_features > 0)
     shaped = torch.zeros(P * B)
+    memory = None if starts.goal_memory is None else starts.goal_memory.repeat(P, 1)
+    seen_at = model.num_belief_features if controller.beliefs else 0   # hvor synet står i extra
+    prev_distance = None
     for _ in range(config.horizon):
         h = hidden[0][-1]
-        extra = world_features(model, z, hidden, controller.beliefs, controller.lookahead)
+        extra, memory = world_features(model, z, hidden, controller.beliefs, controller.lookahead,
+                                       controller.sight, memory)
+        if eye_shaping:
+            # Gevinsten for forrige skritt, nå som vi ser bildet det førte til. alive er sannsynligheten
+            # for at det skrittet var en vanlig flytting; etter mål eller krasj betyr bildet ingenting.
+            distance = position_distance(model, extra[:, seen_at:seen_at + 4])
+            if prev_distance is not None:
+                shaped += alive * config.shaping * (prev_distance - distance)
+            prev_distance = distance
         logits = controller.batched_logits(
             population, z.view(P, B, D), h.view(P, B, -1), None if extra is None else extra.view(P, B, -1)
         )
@@ -133,7 +162,7 @@ def dream_fitness(
             + p[:, EVENT_OBSTACLE] * config.reward_obstacle
         )
         total += alive * expected
-        if use_shaping:
+        if use_shaping and not eye_shaping:
             gain = goal_distance(model, h) - goal_distance(model, hidden[0][-1])
             shaped += alive * config.shaping * gain
         p_goal_sum += alive * p[:, EVENT_GOAL]
@@ -141,6 +170,9 @@ def dream_fitness(
         alive = alive * p[:, EVENT_MOVE]
         nxt = sample_next(out, config.temperature, generator) if config.temperature > 0 else most_likely_mean(out)
         z = nxt[:, 0]
+    if eye_shaping:
+        seen, _ = model.see(z, memory)
+        shaped += alive * config.shaping * (prev_distance - position_distance(model, seen))
     total += alive * config.remaining_steps * config.reward_step
     fitness = (total + shaped).view(P, B).mean(1).numpy()
     if not return_details:

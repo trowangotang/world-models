@@ -34,19 +34,23 @@ from worldmodels.vae.model import ConvVAE
 # innsamling 400 000–699 999, holdt-ute sett 900 000+).
 EVAL_SEED = 200_000
 
+# (navn, M, controller, diagnostikk). Diagnostikk er controllere vi har satt sammen for hånd for å
+# finne flaskehalser; de er ikke lært og regnes ikke som et steg. Den siste lærte er sluttagenten.
 AGENTS = (
-    ("Steg 4: lært i drømmen", "mdnrnn_direct_k5.pt", "controller_s256.npz"),
-    ("Steg 4b: iterativ trening", "iter/mdnrnn_r3.pt", "iter/controller_r3.npz"),
-    ("Steg 4c: mål-bevisst drøm", "mdnrnn_pos.pt", "controller_curriculum_feat.npz"),
-    ("Steg 4d: bedre søk", "mdnrnn_pos.pt", "controller_cma_zh0.npz"),
-    ("Steg 4e: unngå hindringer", "mdnrnn_pos.pt", "controller_look_zh0.npz"),
+    ("Steg 4: lært i drømmen", "mdnrnn_direct_k5.pt", "controller_s256.npz", False),
+    ("Steg 4b: iterativ trening", "iter/mdnrnn_r3.pt", "iter/controller_r3.npz", False),
+    ("Steg 4c: mål-bevisst drøm", "mdnrnn_pos.pt", "controller_curriculum_feat.npz", False),
+    ("Steg 4d: bedre søk", "mdnrnn_pos.pt", "controller_cma_zh0.npz", False),
+    ("Steg 4e: unngå hindringer", "mdnrnn_pos.pt", "controller_look_zh0.npz", False),
+    ("Håndlaget på øyet (diagnostikk)", "mdnrnn_eye.pt", "controller_eye_handcrafted.npz", True),
+    ("Steg 6: syn", "mdnrnn_eye.pt", "controller_eye_look.npz", False),
 )
 
 
 def load_agents(checkpoints: Path, vae_name: str, log) -> list[WorldModelPolicy]:
     vae, _ = ConvVAE.load(checkpoints / vae_name)
     out = []
-    for name, rnn_name, ctrl_name in AGENTS:
+    for name, rnn_name, ctrl_name, diagnostic in AGENTS:
         rnn_path, ctrl_path = checkpoints / rnn_name, checkpoints / ctrl_name
         if not (rnn_path.exists() and ctrl_path.exists()):
             log(f"hopper over {name}: mangler {rnn_path} eller {ctrl_path}")
@@ -54,8 +58,14 @@ def load_agents(checkpoints: Path, vae_name: str, log) -> list[WorldModelPolicy]
         rnn, _ = MDNRNN.load(rnn_path)
         policy = WorldModelPolicy(name, WorldModelAgent(vae, rnn, LinearController.load(ctrl_path)))
         policy.files = {"rnn": str(rnn_path), "controller": str(ctrl_path)}
+        policy.diagnostic = diagnostic
         out.append(policy)
     return out
+
+
+def final_name(agents) -> str | None:
+    learned = [p.name for p in agents if not p.diagnostic]
+    return learned[-1] if learned else None
 
 
 def pick(records, outcome: str, k: int) -> list[int]:
@@ -95,10 +105,11 @@ def main(argv: list[str] | None = None) -> None:
 
     # Parvise sammenligninger på de samme brettene: hvert steg mot det forrige, og sluttagenten
     # mot grunnlinjene den bør måles mot.
-    names = [p.name for p in agents]
-    pairs = list(zip(names[1:], names[:-1]))
-    if names:
-        pairs += [(names[-1], RandomBaseline.name), (names[-1], GreedySafeBaseline.name)]
+    learned = [p.name for p in agents if not p.diagnostic]
+    pairs = list(zip(learned[1:], learned[:-1]))
+    if learned:
+        pairs += [(learned[-1], RandomBaseline.name), (learned[-1], GreedySafeBaseline.name)]
+        pairs += [(learned[-1], p.name) for p in agents if p.diagnostic]
     paired = [{"a": x, "b": y, **{o: paired_difference(records[x], records[y], o) for o in ("goal", "obstacle")}}
               for x, y in pairs]
 
@@ -113,7 +124,9 @@ def main(argv: list[str] | None = None) -> None:
     figure_files = make_figures(out, policies, agents, records, summaries, dream)
     results = {
         "seeds": [seeds[0], seeds[-1]],
-        "policies": [{"name": p.name, "cheat": p.cheat, **getattr(p, "files", {})} for p in policies],
+        "policies": [{"name": p.name, "cheat": p.cheat, "diagnostic": getattr(p, "diagnostic", False),
+                      **getattr(p, "files", {})} for p in policies],
+        "final": final_name(agents),
         "summaries": summaries,
         "paired": paired,
         "dream_vs_real": dream,
@@ -143,7 +156,8 @@ def make_figures(out: Path, policies, agents, records, summaries, dream) -> dict
         files[f"dream_{event}"] = f"dream_{event}.svg"
 
     # Sluttagenten: fire episoder av hvert utfall, som vei oppå startbildet og som bildestripe.
-    final = agents[-1]
+    learned = [p for p in agents if not p.diagnostic]
+    final = learned[-1]
     rs = records[final.name]
     chosen = {o: pick(rs, o, 4) for o in ("goal", "obstacle", "truncated")}
     by_seed = {r.seed: r for r in rs}
@@ -157,8 +171,8 @@ def make_figures(out: Path, policies, agents, records, summaries, dream) -> dict
     files["chosen"] = chosen
 
     # Samme brett, to agenter: der 4d krasjet og sluttagenten kom frem.
-    if len(agents) >= 2:
-        prev = agents[-2]
+    if len(learned) >= 2:
+        prev = learned[-2]
         prev_by = {r.seed: r for r in records[prev.name]}
         flips = [s for s, r in by_seed.items() if r.outcome == "goal" and prev_by[s].outcome == "obstacle"][:4]
         if flips:
