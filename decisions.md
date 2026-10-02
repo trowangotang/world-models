@@ -225,3 +225,51 @@ Artikkelen gjør drømmen mer uforutsigbar (tau 1,15) for å motvirke utnyttelse
 tau 0 / 1 / 1,5 / 2,5 og 64 mot 256 starter per generasjon. Alle endte på 5–7 % mål og 30–40 %
 hindring. Problemet er ikke at controlleren utnytter en for forutsigbar drøm, men at drømmen
 ikke vet nok om mål. Rådata: `docs/experiments/controller_runs.json`.
+
+## Steg 4b: iterativ trening
+
+### D28. Iterativ trening som eget steg
+Martin valgte å prøve artikkelens del 5: la controlleren samle nye ekte data, tren MDN-RNN-en
+videre på dem, og tren controlleren på nytt i den forbedrede drømmen. Tanken er at drømmen blir
+lurt akkurat der controlleren går, og at de tilstandene mangler i de tilfeldige dataene.
+
+Våre valg (`worldmodels/controller/iterate.py`):
+- **5000 nye episoder per runde**, med **epsilon 0,3**: hver handling byttes ut med en tilfeldig en
+  med 30 % sannsynlighet. Uten utforsking ville dataene bare vist vegg-strategien.
+- **Alle data beholdes**: M trenes på de tilfeldige dataene pluss alle rundene så langt, så den
+  ikke glemmer resten av verden.
+- **Fortsett fra forrige vekter** for både M (8 epoker, lr 5e-4) og C (150 generasjoner). Billigere
+  enn å starte på nytt, og hver runde bygger på den forrige.
+- **VAE-en holdes fast.** Den ser allerede alle layouter (D12), og en ny V ville gjort M og C ubrukelige.
+- **Egne seeds**: innsamling i runde r bruker seeds fra 300 000 + r · 100 000, evaluering fra 100 000.
+
+### D29. Resultat: drømmen lures ikke lenger, men målet er fortsatt vanskelig
+1000 ekte episoder per runde, samme seeds hver gang:
+
+| Runde | Drøm: mål | Ekte: mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|---:|
+| 0 (steg 4) | 36 % | 8 % | 35 % | 57 % | −0,57 |
+| 1 | 5 % | 6 % | 33 % | 61 % | −0,58 |
+| 2 | 11 % | 6 % | 32 % | 62 % | −0,58 |
+| 3 | 8 % | 6 % | 30 % | 65 % | −0,57 |
+
+- **Utnyttelsen forsvant i første runde.** Drømmen tror ikke lenger at vegg-strategien når målet.
+  Det er akkurat effekten artikkelen beskriver.
+- **Krasjene går jevnt ned**, fra 35 % til 30 %.
+- **Men målraten står stille på ~6 %**, og controlleren går fortsatt mot høyre i ~88 % av skrittene.
+
+M målt på 1000 nye episoder den aldri har sett (andel av hendelsene den forutser):
+
+| M | Tilfeldige: mål / hindring | Controllerens: mål / hindring |
+|---|---:|---:|
+| Original (steg 3) | 12 % / 44 % | 12 % / 37 % |
+| Etter runde 3 | 10 % / 60 % | 17 % / 66 % |
+
+M har lært mye mer om hindringer, men nesten ingenting nytt om mål. Controllerens data inneholder
+bare ~10 % mål-episoder, så signalet blir ikke sterkere av å samle mer av samme slag.
+
+### D30. En fersk controller slipper ikke ut heller
+For å sjekke om controlleren bare satt fast i steg 4-vektene, trente vi en ny fra null (300
+generasjoner) i drømmen fra runde 3. Den endte på 3 % mål, 24 % hindring og 74 % avkortet: enda
+forsiktigere, men ikke bedre på mål. Flaskehalsen er altså drømmens svake kunnskap om mål, ikke
+startpunktet til controlleren. Rådata: `docs/experiments/iterate_results.json`.

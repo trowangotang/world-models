@@ -2,12 +2,12 @@ import numpy as np
 import pytest
 import torch
 
-from worldmodels.controller.agent import WorldModelAgent, run_real_episodes
+from worldmodels.controller.agent import WorldModelAgent, collect_agent_rollouts, play_episodes, run_real_episodes
 from worldmodels.controller.dream import DreamConfig, dream_fitness, make_warm_starts
 from worldmodels.controller.es import EvolutionStrategy, centered_ranks
 from worldmodels.controller.policy import LinearController
-from worldmodels.data import collect_rollouts, episode_paths
-from worldmodels.mdnrnn.encode import encode_episodes
+from worldmodels.data import collect_rollouts, episode_paths, load_episode
+from worldmodels.mdnrnn.encode import ZSequences, encode_episodes
 from worldmodels.mdnrnn.model import MDNRNN, MDNRNNConfig
 from worldmodels.vae.model import ConvVAE, VAEConfig
 
@@ -121,3 +121,57 @@ def test_real_episodes_run_and_report_rates(world):
     assert stats["episodes"] == 6
     assert stats["goal_rate"] + stats["obstacle_rate"] + stats["truncated_rate"] == pytest.approx(1.0)
     assert 1 <= stats["mean_length"] <= 50
+
+
+def test_recorded_episodes_match_stats_and_format(world):
+    vae, rnn, _ = world
+    c = LinearController(4, 8)
+    stats, episodes = play_episodes(WorldModelAgent(vae, rnn, c), 5, seed=7, epsilon=0.5, record=True)
+    assert len(episodes) == 5
+    for ep in episodes:
+        ep.validate()
+        assert ep.terminated[-1] or ep.truncated[-1]
+    assert np.mean([ep.rewards.sum() for ep in episodes]) == pytest.approx(stats["mean_return"], abs=1e-5)
+
+
+def test_full_exploration_ignores_controller(world):
+    vae, rnn, _ = world
+    c = LinearController(4, 8)
+    c.params[:] = 0
+    c.params[-4:] = [0, 0, 0, 10]  # bias: alltid "høyre" uten utforsking
+    agent = WorldModelAgent(vae, rnn, c)
+    agent.reset(200)
+    obs = np.zeros((200, 64, 64, 3), np.uint8)
+    assert (agent.act(obs) == 3).all()
+    agent.reset(200)
+    counts = np.bincount(agent.act(obs, epsilon=1.0, rng=np.random.default_rng(0)), minlength=4)
+    assert counts.min() > 20
+
+
+def test_collect_agent_rollouts_can_be_encoded(world, tmp_path):
+    vae, rnn, _ = world
+    stats = collect_agent_rollouts(WorldModelAgent(vae, rnn, LinearController(4, 8)), tmp_path, 7, seed=3, batch_size=3)
+    paths = episode_paths(tmp_path)
+    assert len(paths) == 7 and stats["episodes"] == 7
+    load_episode(paths[0])
+    seqs = encode_episodes(vae, paths)
+    both = ZSequences.concat([seqs, seqs])
+    assert len(both) == 14 and len(both.mu) == 2 * len(seqs.mu)
+    assert np.array_equal(both.episode(7)["actions"], seqs.episode(0)["actions"])
+
+
+def test_iterate_runs_one_tiny_round(world, tmp_path):
+    from worldmodels.controller.iterate import iterate
+
+    vae, rnn, seqs = world
+    vae.save(tmp_path / "vae.pt")
+    rnn.save(tmp_path / "rnn.pt")
+    LinearController(4, 8).save(tmp_path / "c.npz")
+    seqs.save(tmp_path / "zseq.npz")
+    result = iterate(
+        tmp_path / "vae.pt", tmp_path / "rnn.pt", tmp_path / "c.npz", [tmp_path / "zseq.npz"], tmp_path / "iter",
+        rounds=1, episodes_per_round=6, rnn_epochs=1, generations=2, starts=4, eval_episodes=4, log=lambda m: None,
+    )
+    assert [r["round"] for r in result["rounds"]] == [0, 1]
+    assert (tmp_path / "iter" / "controller_r1.npz").exists()
+    assert len(result["rounds"][1]["data"]) == 2

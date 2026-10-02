@@ -1,0 +1,197 @@
+{
+  "rounds": [
+    {
+      "round": 0,
+      "rnn": "checkpoints/mdnrnn_direct_k5.pt",
+      "controller": "checkpoints/controller_s256.npz",
+      "real": {
+        "episodes": 1000,
+        "goal_rate": 0.082,
+        "obstacle_rate": 0.348,
+        "truncated_rate": 0.57,
+        "mean_return": -0.5658,
+        "mean_length": 30.41
+      }
+    },
+    {
+      "round": 1,
+      "rnn": "checkpoints/iter/mdnrnn_r1.pt",
+      "controller": "checkpoints/iter/controller_r1.npz",
+      "data": [
+        "data/zseq_20k.npz",
+        "checkpoints/iter/zseq_r1.npz"
+      ],
+      "collected": {
+        "episodes": 5000,
+        "goal_rate": 0.1058,
+        "obstacle_rate": 0.6028,
+        "truncated_rate": 0.2914
+      },
+      "rnn_best_epoch": 7,
+      "rnn_val_last": {
+        "loss": -0.12922449405383338,
+        "nll": -0.7026324220469571,
+        "event_ce": 0.3124223681277397,
+        "mse": 0.026098555834607202
+      },
+      "dream_p_goal": 0.04879741743206978,
+      "dream_p_obstacle": 0.18819476664066315,
+      "action_share": [
+        0.004000000189989805,
+        0.07199999690055847,
+        0.03500000014901161,
+        0.8889999985694885
+      ],
+      "real": {
+        "episodes": 1000,
+        "goal_rate": 0.063,
+        "obstacle_rate": 0.329,
+        "truncated_rate": 0.608,
+        "mean_return": -0.5833100000000001,
+        "mean_length": 32.123
+      },
+      "seconds": 425
+    },
+    {
+      "round": 2,
+      "rnn": "checkpoints/iter/mdnrnn_r2.pt",
+      "controller": "checkpoints/iter/controller_r2.npz",
+      "data": [
+        "data/zseq_20k.npz",
+        "checkpoints/iter/zseq_r1.npz",
+        "checkpoints/iter/zseq_r2.npz"
+      ],
+      "collected": {
+        "episodes": 5000,
+        "goal_rate": 0.1046,
+        "obstacle_rate": 0.5804,
+        "truncated_rate": 0.315
+      },
+      "rnn_best_epoch": 8,
+      "rnn_val_last": {
+        "loss": -0.3196367528944461,
+        "nll": -0.7756102884876953,
+        "event_ce": 0.21583918558609683,
+        "mse": 0.024013435211797537
+      },
+      "dream_p_goal": 0.1131950169801712,
+      "dream_p_obstacle": 0.19947659969329834,
+      "action_share": [
+        0.00800000037997961,
+        0.050999999046325684,
+        0.06800000369548798,
+        0.8730000257492065
+      ],
+      "real": {
+        "episodes": 1000,
+        "goal_rate": 0.061,
+        "obstacle_rate": 0.322,
+        "truncated_rate": 0.617,
+        "mean_return": -0.5811900000000001,
+        "mean_length": 32.402
+      },
+      "seconds": 468
+    },
+    {
+      "round": 3,
+      "rnn": "checkpoints/iter/mdnrnn_r3.pt",
+      "controller": "checkpoints/iter/controller_r3.npz",
+      "data": [
+        "data/zseq_20k.npz",
+        "checkpoints/iter/zseq_r1.npz",
+        "checkpoints/iter/zseq_r2.npz",
+        "checkpoints/iter/zseq_r3.npz"
+      ],
+      "collected": {
+        "episodes": 5000,
+        "goal_rate": 0.1012,
+        "obstacle_rate": 0.5608,
+        "truncated_rate": 0.338
+      },
+      "rnn_best_epoch": 8,
+      "rnn_val_last": {
+        "loss": -0.4115781736979575,
+        "nll": -0.8334168218015159,
+        "event_ce": 0.19482814356493391,
+        "mse": 0.02270105088869107
+      },
+      "dream_p_goal": 0.08109338581562042,
+      "dream_p_obstacle": 0.12317568808794022,
+      "action_share": [
+        0.012000000104308128,
+        0.03099999949336052,
+        0.0729999989271164,
+        0.8840000033378601
+      ],
+      "real": {
+        "episodes": 1000,
+        "goal_rate": 0.057,
+        "obstacle_rate": 0.295,
+        "truncated_rate": 0.648,
+        "mean_return": -0.57248,
+        "mean_length": 33.8
+      },
+      "seconds": 509
+    }
+  ],
+  "fresh_controller_round3": {
+    "hparams": {
+      "generations": 300,
+      "population": 32,
+      "starts_per_generation": 256,
+      "sigma": 0.1,
+      "lr": 0.03,
+      "context": 5,
+      "horizon": 10,
+      "temperature": 1.0,
+      "seed": 0,
+      "vae": "checkpoints/vae_z32_w10.pt",
+      "rnn": "checkpoints/iter/mdnrnn_r3.pt",
+      "init_from": null
+    },
+    "last": {
+      "generation": 300,
+      "fitness_mean": -0.0897141769528389,
+      "fitness_max": -0.0633845180273056,
+      "dream_fitness": -0.09515591710805893,
+      "dream_p_goal": 0.06932340562343597,
+      "dream_p_obstacle": 0.07637250423431396,
+      "action_share": [
+        0.12399999797344208,
+        0.017000000923871994,
+        0.15000000596046448,
+        0.7089999914169312
+      ],
+      "real": {
+        "episodes": 200,
+        "goal_rate": 0.03,
+        "obstacle_rate": 0.235,
+        "truncated_rate": 0.735,
+        "mean_return": -0.57825,
+        "mean_length": 37.59
+      }
+    }
+  },
+  "mdnrnn_heldout_event_recall": {
+    "original / rand": {
+      "goal_recall": 0.116,
+      "obstacle_recall": 0.438,
+      "move_recall": 0.957
+    },
+    "original / ctrl": {
+      "goal_recall": 0.124,
+      "obstacle_recall": 0.365,
+      "move_recall": 0.98
+    },
+    "runde 3 / rand": {
+      "goal_recall": 0.103,
+      "obstacle_recall": 0.595,
+      "move_recall": 0.96
+    },
+    "runde 3 / ctrl": {
+      "goal_recall": 0.169,
+      "obstacle_recall": 0.656,
+      "move_recall": 0.982
+    }
+  }
+}

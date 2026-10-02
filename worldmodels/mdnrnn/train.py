@@ -132,7 +132,7 @@ def run_epoch(
 
 
 def train(
-    data: str | Path,
+    data: str | Path | list,
     out: str | Path,
     hidden_dim: int = 256,
     num_mixtures: int = 5,
@@ -144,19 +144,26 @@ def train(
     input_mlp: bool = True,
     direct_path: bool = True,
     mse_weight: float = 10.0,
+    init_from: str | Path | None = None,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
 ) -> dict:
+    """Tren MDN-RNN-en. Med init_from fortsetter treningen fra en tidligere checkpoint
+    (arkitekturen hentes derfra), slik som i iterativ trening."""
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
-    seqs = ZSequences.load(data)
+    seqs = ZSequences.load_many(data)
     train_idx, val_idx = split_indices(len(seqs), seed=seed)
     log(f"Trening: {len(train_idx)} episoder, validering: {len(val_idx)} episoder")
 
-    model = MDNRNN(MDNRNNConfig(
-        latent_dim=seqs.mu.shape[1], hidden_dim=hidden_dim, num_mixtures=num_mixtures, input_mlp=input_mlp,
-        direct_path=direct_path,
-    ))
+    if init_from is not None:
+        model, _ = MDNRNN.load(init_from)
+        log(f"Fortsetter fra {init_from}")
+    else:
+        model = MDNRNN(MDNRNNConfig(
+            latent_dim=seqs.mu.shape[1], hidden_dim=hidden_dim, num_mixtures=num_mixtures, input_mlp=input_mlp,
+            direct_path=direct_path,
+        ))
     class_weights = event_class_weights(seqs.subset(train_idx).events) if balance_events else None
     if class_weights is not None:
         log(f"Hendelsesvekter (flytt, mål, hindring): {[round(w, 2) for w in class_weights.tolist()]}")
@@ -184,7 +191,8 @@ def train(
         "hidden_dim": hidden_dim, "num_mixtures": num_mixtures, "epochs": epochs, "batch_size": batch_size,
         "lr": lr, "event_weight": event_weight, "balance_events": balance_events, "input_mlp": input_mlp,
         "direct_path": direct_path, "mse_weight": mse_weight, "best_epoch": best_epoch,
-        "seed": seed, "data": str(data),
+        "seed": seed, "data": [str(d) for d in data] if isinstance(data, (list, tuple)) else str(data),
+        "init_from": str(init_from) if init_from else None,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     model.load_state_dict(best_state)
@@ -195,8 +203,9 @@ def train(
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Tren MDN-RNN på z-sekvenser")
-    p.add_argument("--data", default="data/zseq_20k.npz")
+    p.add_argument("--data", nargs="+", default=["data/zseq_20k.npz"], help="én eller flere z-sekvensfiler")
     p.add_argument("--out", default="checkpoints/mdnrnn.pt")
+    p.add_argument("--init-from", default=None, help="fortsett fra denne checkpointen")
     p.add_argument("--hidden-dim", type=int, default=256)
     p.add_argument("--mixtures", type=int, default=5)
     p.add_argument("--epochs", type=int, default=40)
@@ -213,7 +222,7 @@ def main(argv: list[str] | None = None) -> None:
         args.data, args.out, hidden_dim=args.hidden_dim, num_mixtures=args.mixtures, epochs=args.epochs,
         batch_size=args.batch_size, lr=args.lr, event_weight=args.event_weight,
         balance_events=not args.no_balance_events, input_mlp=not args.linear_input,
-        direct_path=not args.no_direct_path, mse_weight=args.mse_weight, seed=args.seed,
+        direct_path=not args.no_direct_path, mse_weight=args.mse_weight, init_from=args.init_from, seed=args.seed,
     )
     print(json.dumps(result["history"][-1]))
 
