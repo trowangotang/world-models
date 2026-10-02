@@ -449,3 +449,52 @@ Ekte miljø, 1000 episoder. Samme oppsett som D39 (CMA-ES, formet belønning, `-
 - Å gi controlleren også z og h (spredning 0,03) hjalp ikke.
 
 Rådata: `docs/experiments/obstacles.json`.
+
+## Steg 5: evaluering i det ekte miljøet
+
+### D43. Én felles evaluering på 2000 nye brett, med intervaller og juks-grunnlinjer
+Martin valgte å gå rett til steg 5 i stedet for å fikse pendlingen først. Tidligere steg ble målt
+på 1000 episoder med litt ulike oppsett, så tallene var vanskelige å sammenligne. Nå spiller alle
+controllerne og fem grunnlinjer de samme 2000 brettene (seeds 200 000–201 999, som ingen har sett).
+`python -m worldmodels.evaluation` gjør alt og skriver `docs/evaluation/report.md`.
+
+- **95 %-intervaller** (Wilson for rater, bootstrap for avkastning), og **parvise forskjeller** på
+  de samme brettene, som er mye skarpere enn to separate intervaller.
+- **Grunnlinjer med juks** som leser miljøets indre tilstand: tilfeldig som unngår hindringer, rett
+  mot målet, rett mot målet som unngår hindringer, og korteste vei. De svarer på "hvor godt kunne
+  denne typen policy gjort det med perfekt kunnskap?", og skiller feil i C fra feil i V og M.
+- Vi la ikke til nye controllere. Steg 5 skal måle det vi har, ikke flytte målstreken.
+
+Med flere brett ble 4e litt bedre enn i D42 (41 % mål mot 38 %), innenfor usikkerheten.
+
+### D44. Sluttagenten er den beste, men 4d og 4e når målet like ofte
+Parvis mot 4d på de samme brettene: 22 prosentpoeng færre krasj (intervall 19–25), og ingen sikker
+forskjell i mål (−1,8 poeng, intervall −4,3 til +0,7). Fremsynet byttet krasj mot avkortede
+episoder, ikke mot flere mål. Avkastningen er best for 4e (−0,12 mot −0,19), fordi et krasj koster
+mer enn å bli stående.
+
+### D45. Pendlingen skyldes feil tro, ikke at C mangler minne
+D42 antok at 4e pendler fordi en controller uten hukommelse ikke kan komme rundt en hindring.
+Juks-grunnlinjen "rett mot målet, unngår hindringer" er nettopp en slik controller, uten minne,
+men med sanne posisjoner. Den når målet i 99 % og pendler i bare 21 av 2000 episoder.
+Altså er regelen 4e prøver å lære god nok. Det som svikter, er inndataene.
+
+### D46. Flaskehalsen er hva M vet om målet, og de første skrittene er blinde
+Vi målte M sin tro mot fasiten i hvert ekte skritt (`evaluation/beliefs.py`). For 4e:
+
+- Agentens posisjon: riktig celle i 66 % av skrittene, 73–81 % etter 5–10 skritt.
+- **Målets posisjon: riktig celle i bare 26 %**, snittfeil 2,2 celler. Den blir ikke bedre over tid.
+- **Skritt 0 er blindt.** Troen kommer fra minnet før bildet er lest, og minnet er tomt i starten.
+  Første handling er derfor nesten den samme på alle brett. 29 % av krasjene til 4e skjer i skritt 1–2.
+
+Det forklarer også hvorfor 4d og 4e bare når målet i 57 % av brettene der målet er 1–3 skritt unna,
+mens juks-versjonen av samme regel når det i 100 %. Neste forbedring bør gjelde V og M (for eksempel
+å lese posisjonene fra [z, h] etter at bildet er sett), ikke C.
+
+### D47. Drømmen har blitt ærligere, men bare i snitt
+Etter 5 ekte skritt drømte vi 10 skritt fra nøyaktig den tilstanden, og spilte så de samme skrittene
+i virkeligheten (`evaluation/dream_check.py`). Steg 4 drømte om nesten fire ganger så mange mål som
+den fikk (9,6 % mot 2,5 %): drømmen ble utnyttet, som i D26. For 4e lover drømmen 35 % mål og 32 %
+skjer. 4d sin drøm er derimot for pessimistisk (31 % mål mot 50 %, 57 % krasj mot 34 %).
+M rangerer enkeltsituasjoner svakt (AUC 0,65–0,70 for 4d og 4e), så drømmen er god til å sammenligne
+policyer i snitt, men dårlig til å si hva som skjer på ett bestemt brett.

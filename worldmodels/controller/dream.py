@@ -152,4 +152,7 @@ def dream_fitness(
         "p_alive_end": alive.view(P, B).mean(1).numpy(),
         "shaping": shaped.view(P, B).mean(1).numpy(),
         "action_share": (action_counts / action_counts.sum()).numpy(),
+        # Per kandidat og start, (P, B): brukes til å sammenligne drøm og virkelighet (steg 5).
+        "p_goal_per_start": p_goal_sum.view(P, B).numpy(),
+        "p_obstacle_per_start": p_obstacle_sum.view(P, B).numpy(),
     }

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="346" viewBox="0 0 640 346">
+<rect width="640" height="346" fill="white"/>
+<text x="10" y="24" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold">Drøm mot virkelighet: nå målet innen 10 skritt</text>
+<line x1="60" y1="300.0" x2="320" y2="300.0" stroke="#e5e5e5"/>
+<text x="54" y="304.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">0 %</text>
+<text x="60.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">0 %</text>
+<line x1="60" y1="248.0" x2="320" y2="248.0" stroke="#e5e5e5"/>
+<text x="54" y="252.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">20 %</text>
+<text x="112.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">20 %</text>
+<line x1="60" y1="196.0" x2="320" y2="196.0" stroke="#e5e5e5"/>
+<text x="54" y="200.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">40 %</text>
+<text x="164.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">40 %</text>
+<line x1="60" y1="144.0" x2="320" y2="144.0" stroke="#e5e5e5"/>
+<text x="54" y="148.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">60 %</text>
+<text x="216.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">60 %</text>
+<line x1="60" y1="92.0" x2="320" y2="92.0" stroke="#e5e5e5"/>
+<text x="54" y="96.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">80 %</text>
+<text x="268.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">80 %</text>
+<line x1="60" y1="40.0" x2="320" y2="40.0" stroke="#e5e5e5"/>
+<text x="54" y="44.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">100 %</text>
+<text x="320.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">100 %</text>
+<line x1="60" y1="300" x2="320" y2="40" stroke="#999" stroke-dasharray="4 3"/>
+<text x="190.0" y="334" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle">Drømmen sa</text>
+<text x="16" y="170.0" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" transform="rotate(-90 16 170.0)">Det skjedde</text>
+<polyline fill="none" stroke="#1f77b4" stroke-width="1.5" points="61.0,295.9 107.7,288.0 162.0,277.7 215.2,280.0 271.1,276.4 313.6,278.0"/>
+<circle cx="61.0" cy="295.9" r="7.0" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="107.7" cy="288.0" r="3.3" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="162.0" cy="277.7" r="3.0" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="215.2" cy="280.0" r="2.8" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="271.1" cy="276.4" r="3.0" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="313.6" cy="278.0" r="3.3" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="348" cy="46" r="4" fill="#1f77b4"/>
+<text x="358" y="50" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 4: lært i drømmen</text>
+<polyline fill="none" stroke="#ff7f0e" stroke-width="1.5" points="60.7,299.2 106.4,257.8 163.4,300.0 221.0,300.0 272.1,276.4 307.8,281.4"/>
+<circle cx="60.7" cy="299.2" r="7.0" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="106.4" cy="257.8" r="3.0" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="163.4" cy="300.0" r="2.7" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="221.0" cy="300.0" r="2.5" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="272.1" cy="276.4" r="2.6" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="307.8" cy="281.4" r="2.6" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="348" cy="66" r="4" fill="#ff7f0e"/>
+<text x="358" y="70" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 4b: iterativ trening</text>
+<polyline fill="none" stroke="#2ca02c" stroke-width="1.5" points="62.3,295.5 104.1,284.3 165.1,284.7 214.2,279.5 266.7,251.9 309.1,217.0"/>
+<circle cx="62.3" cy="295.5" r="7.0" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="104.1" cy="284.3" r="3.8" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="165.1" cy="284.7" r="3.2" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="214.2" cy="279.5" r="3.0" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="266.7" cy="251.9" r="3.2" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="309.1" cy="217.0" r="3.1" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="348" cy="86" r="4" fill="#2ca02c"/>
+<text x="358" y="90" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 4c: mål-bevisst drøm</text>
+<polyline fill="none" stroke="#d62728" stroke-width="1.5" points="67.1,204.6 108.5,166.4 164.9,160.9 215.4,133.1 272.2,135.2 309.4,100.7"/>
+<circle cx="67.1" cy="204.6" r="5.7" fill="#d62728" fill-opacity="0.7"/>
+<circle cx="108.5" cy="166.4" r="4.4" fill="#d62728" fill-opacity="0.7"/>
+<circle cx="164.9" cy="160.9" r="3.8" fill="#d62728" fill-opacity="0.7"/>
+<circle cx="215.4" cy="133.1" r="3.6" fill="#d62728" fill-opacity="0.7"/>
+<circle cx="272.2" cy="135.2" r="3.8" fill="#d62728" fill-opacity="0.7"/>
+<circle cx="309.4" cy="100.7" r="3.7" fill="#d62728" fill-opacity="0.7"/>
+<circle cx="348" cy="106" r="4" fill="#d62728"/>
+<text x="358" y="110" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 4d: bedre søk</text>
+<polyline fill="none" stroke="#9467bd" stroke-width="1.5" points="64.5,246.9 108.9,228.0 164.4,203.6 221.1,228.0 271.9,193.1 308.8,137.2"/>
+<circle cx="64.5" cy="246.9" r="6.4" fill="#9467bd" fill-opacity="0.7"/>
+<circle cx="108.9" cy="228.0" r="4.1" fill="#9467bd" fill-opacity="0.7"/>
+<circle cx="164.4" cy="203.6" r="3.8" fill="#9467bd" fill-opacity="0.7"/>
+<circle cx="221.1" cy="228.0" r="3.8" fill="#9467bd" fill-opacity="0.7"/>
+<circle cx="271.9" cy="193.1" r="4.3" fill="#9467bd" fill-opacity="0.7"/>
+<circle cx="308.8" cy="137.2" r="4.5" fill="#9467bd" fill-opacity="0.7"/>
+<circle cx="348" cy="126" r="4" fill="#9467bd"/>
+<text x="358" y="130" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 4e: unngå hindringer</text>
+</svg>
