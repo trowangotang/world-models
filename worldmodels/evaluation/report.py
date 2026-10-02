@@ -27,7 +27,7 @@ def write_report(path: Path, results: dict, figures: dict) -> None:
     lo, hi = results["seeds"]
     n = hi - lo + 1
     L = [
-        "# Steg 5: evaluering i det ekte miljøet", "",
+        "# Evaluering i det ekte miljøet", "",
         f"Alle policyer spilte de samme {n} nye brettene (seeds {lo}–{hi}), som ingen av dem har sett under "
         "trening. Tallene i parentes er 95 %-intervaller (Wilson for rater, bootstrap for avkastning). "
         "Policyer merket *juks* leser miljøets indre tilstand og er målestokker, ikke konkurrenter.", "",
@@ -88,12 +88,14 @@ def write_report(path: Path, results: dict, figures: dict) -> None:
     if results.get("beliefs"):
         L += ["", "## Vet M hvor agenten og målet er?", "",
               "Mens agenten spiller: andel skritt der M sin tro peker på riktig celle, og snittfeil i celler. "
-              "Skritt 0 er før agenten har sett noe som helst; troen der er det M gjetter med tomt minne.", "",
-              "| Agent | Skritt | Agent riktig | Agent feil (celler) | Mål riktig | Mål feil (celler) | Episoder |",
-              "|---|---|---:|---:|---:|---:|---:|"]
+              "Kilde «minne»: troen M leser fra h før bildet er sett, så skritt 0 er en gjetning med tomt minne. "
+              "Kilde «øye»: det øyet leser fra bildet i samme skritt (steg 6).", "",
+              "| Agent | Kilde | Skritt | Agent riktig | Agent feil (celler) | Mål riktig | Mål feil (celler) | Episoder |",
+              "|---|---|---|---:|---:|---:|---:|---:|"]
         for name, b in results["beliefs"].items():
+            source = {"eye": "øye", "memory": "minne"}[b.get("source", "memory")]
             for t, r in [*b["by_step"].items(), ("alle", b["all"])]:
-                L.append(f"| {name} | {t} | {pct(r['agent_exact'], 0)} | {num(r['agent_error'], 1)} | "
+                L.append(f"| {name} | {source} | {t} | {pct(r['agent_exact'], 0)} | {num(r['agent_error'], 1)} | "
                          f"{pct(r['goal_exact'], 0)} | {num(r['goal_error'], 1)} | {r['n']} |")
 
     if results["dream_vs_real"]:
@@ -114,7 +116,7 @@ def write_report(path: Path, results: dict, figures: dict) -> None:
               f"![Drøm mot virkelighet, hindring]({figures['dream_obstacle']})", ""]
 
     if "final_paths" in figures:
-        last = list(results["dream_vs_real"])[-1]
+        last = results.get("final") or list(results["dream_vs_real"])[-1]
         L += ["## Episoder fra sluttagenten", "",
               f"{last}. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. "
               "Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.", "",
