@@ -1,0 +1,71 @@
+[
+  {
+    "checkpoint": "checkpoints/vae_z16_w10.pt",
+    "hparams": {
+      "latent_dim": 16,
+      "epochs": 12,
+      "batch_size": 128,
+      "lr": 0.001,
+      "object_weight": 10.0,
+      "beta": 1.0,
+      "seed": 0,
+      "data_dir": "data/rollouts_20k",
+      "frames_per_episode": 4
+    },
+    "val_mse": 0.0035768975503742695,
+    "cell_accuracy": 0.9822809493586317,
+    "layout_exact": 0.3022447888829503,
+    "agent_cell_accuracy": 0.7660342063067879,
+    "agent_missing": 0.07335649385355425,
+    "probe_agent_linear": 0.01870657402458578,
+    "probe_agent_mlp": 0.343399251737039,
+    "probe_goal_linear": 0.020388745412532282,
+    "probe_goal_mlp": 0.23678129672420822
+  },
+  {
+    "checkpoint": "checkpoints/vae_z16_w1.pt",
+    "hparams": {
+      "latent_dim": 16,
+      "epochs": 12,
+      "batch_size": 128,
+      "lr": 0.001,
+      "object_weight": 1.0,
+      "beta": 1.0,
+      "seed": 0,
+      "data_dir": "data/rollouts_20k",
+      "frames_per_episode": 4
+    },
+    "val_mse": 0.006842472590506077,
+    "cell_accuracy": 0.962025237172635,
+    "layout_exact": 0.0,
+    "agent_cell_accuracy": 0.0,
+    "agent_missing": 1.0,
+    "probe_agent_linear": 0.03033137359700695,
+    "probe_agent_mlp": 0.02672367717797969,
+    "probe_goal_linear": 0.01807802093244529,
+    "probe_goal_mlp": 0.012097322278102488
+  },
+  {
+    "checkpoint": "checkpoints/vae_z32_w10.pt",
+    "hparams": {
+      "latent_dim": 32,
+      "epochs": 12,
+      "batch_size": 128,
+      "lr": 0.001,
+      "object_weight": 10.0,
+      "beta": 1.0,
+      "seed": 0,
+      "data_dir": "data/rollouts_20k",
+      "frames_per_episode": 4
+    },
+    "val_mse": 0.0016355487750843167,
+    "cell_accuracy": 0.9923044160876536,
+    "layout_exact": 0.6543292357028327,
+    "agent_cell_accuracy": 0.9035275253874934,
+    "agent_missing": 0.03674505611972207,
+    "probe_agent_linear": 0.11451095670764297,
+    "probe_agent_mlp": 0.5252538749331908,
+    "probe_goal_linear": 0.023515019709120566,
+    "probe_goal_mlp": 0.4075030583118119
+  }
+]
