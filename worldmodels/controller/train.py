@@ -47,6 +47,7 @@ def train(
     use_positions: bool = False,
     lookahead: bool = False,
     sight: bool = False,
+    track: bool = False,
     charge_remaining: bool = False,
     shaping: float = 0.0,
     optimizer: str = "es",
@@ -68,9 +69,11 @@ def train(
         raise ValueError("use_positions krever en MDN-RNN med posisjonshode")
     if sight and rnn.eye is None:
         raise ValueError("sight krever en MDN-RNN med øye (python -m worldmodels.mdnrnn.eye)")
-    extra_dim = num_world_features(rnn, use_positions, lookahead, sight)
+    if track and not sight:
+        raise ValueError("track krever sight (--use-eye)")
+    extra_dim = num_world_features(rnn, use_positions, lookahead, sight, track)
     controller = LinearController(seqs.mu.shape[1], rnn.config.hidden_dim, rnn.config.num_actions, extra_dim,
-                                  beliefs=use_positions, lookahead=lookahead, sight=sight)
+                                  beliefs=use_positions, lookahead=lookahead, sight=sight, track=track)
     init = LinearController.load(init_from).params if init_from else None
     if init is not None:
         log(f"Fortsetter fra {init_from}")
@@ -123,7 +126,7 @@ def train(
         "sigma": sigma, "lr": lr, "context": context, "horizon": horizon, "temperature": temperature, "seed": seed,
         "vae": str(vae_path), "rnn": str(rnn_path), "init_from": str(init_from) if init_from else None,
         "use_positions": use_positions, "remaining_steps": remaining, "shaping": shaping, "optimizer": optimizer,
-        "zh_std": zh_std, "lookahead": lookahead, "sight": sight,
+        "zh_std": zh_std, "lookahead": lookahead, "sight": sight, "track": track,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     controller.save(out, hparams=json.dumps(hparams))
@@ -154,6 +157,8 @@ def main(argv: list[str] | None = None) -> None:
                    help="gi controlleren M sitt fremsyn: sannsynlighet for hindring for hver handling")
     p.add_argument("--use-eye", action="store_true",
                    help="gi controlleren det øyet ser: agent og mål i bildet akkurat nå (krever M med øye)")
+    p.add_argument("--track", action="store_true",
+                   help="spor agenten med et filter og gi controlleren hvor den nylig har vært (krever --use-eye)")
     p.add_argument("--charge-remaining", action="store_true",
                    help="den som overlever drømmen betaler skrittkostnaden for resten av en ekte episode")
     p.add_argument("--shaping", type=float, default=0.0,
@@ -167,7 +172,7 @@ def main(argv: list[str] | None = None) -> None:
         a.vae, a.rnn, a.data, a.out, generations=a.generations, population=a.population,
         starts_per_generation=a.starts, sigma=a.sigma, lr=a.lr, context=a.context, horizon=a.horizon,
         temperature=a.temperature, real_check_every=a.real_check_every, init_from=a.init_from,
-        use_positions=a.use_positions, lookahead=a.lookahead, sight=a.use_eye, charge_remaining=a.charge_remaining,
+        use_positions=a.use_positions, lookahead=a.lookahead, sight=a.use_eye, track=a.track, charge_remaining=a.charge_remaining,
         shaping=a.shaping, optimizer=a.optimizer, zh_std=a.zh_std, seed=a.seed,
     )
     if a.history:
