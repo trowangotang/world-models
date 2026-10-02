@@ -175,3 +175,39 @@ def test_iterate_runs_one_tiny_round(world, tmp_path):
     assert [r["round"] for r in result["rounds"]] == [0, 1]
     assert (tmp_path / "iter" / "controller_r1.npz").exists()
     assert len(result["rounds"][1]["data"]) == 2
+
+
+def test_position_features_shape_range_and_center():
+    rnn = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, position_head=True))
+    f = rnn.position_features(torch.randn(5, 3, 8))
+    assert f.shape == (5, 3, 4) and f.abs().max() <= 1.0
+    with torch.no_grad():
+        rnn.position_head.weight.zero_()
+        rnn.position_head.bias.zero_()
+    assert torch.allclose(rnn.position_features(torch.randn(2, 8)), torch.zeros(2, 4), atol=1e-6)
+    assert MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8)).position_features(torch.randn(2, 8)).shape == (2, 0)
+
+
+def test_controller_with_position_features_runs_in_dream_and_real_env(world, tmp_path):
+    vae, _, seqs = world
+    rnn = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, position_head=True)).eval()
+    c = LinearController(4, 8, extra_dim=rnn.num_position_features)
+    assert c.num_params == (4 + 8 + 4 + 1) * 4
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
+    pop = np.random.default_rng(0).normal(size=(2, c.num_params))
+    assert dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3)).shape == (2,)
+    c.save(tmp_path / "c.npz")
+    assert LinearController.load(tmp_path / "c.npz").extra_dim == 4
+    stats = run_real_episodes(WorldModelAgent(vae, rnn, c), num_episodes=3)
+    assert stats["episodes"] == 3
+
+
+def test_remaining_steps_charges_only_survivors(world):
+    _, rnn, seqs = world
+    c = LinearController(4, 8)
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=2)
+    pop = np.zeros((1, c.num_params))
+    base = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0), return_details=True)
+    charged = dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0, remaining_steps=10))
+    expected = base["fitness"] + base["p_alive_end"] * 10 * DreamConfig.reward_step
+    assert np.allclose(charged, expected, atol=1e-5)

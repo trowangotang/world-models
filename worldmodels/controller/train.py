@@ -22,6 +22,7 @@ from worldmodels.controller.agent import WorldModelAgent, run_real_episodes
 from worldmodels.controller.dream import DreamConfig, dream_fitness, make_warm_starts
 from worldmodels.controller.es import EvolutionStrategy
 from worldmodels.controller.policy import LinearController
+from worldmodels.env import GridConfig
 from worldmodels.mdnrnn.encode import ZSequences
 from worldmodels.mdnrnn.model import MDNRNN
 from worldmodels.mdnrnn.train import split_indices
@@ -41,6 +42,8 @@ def train(
     real_check_every: int = 25,
     real_check_episodes: int = 200,
     init_from: str | Path | None = None,
+    use_positions: bool = False,
+    charge_remaining: bool = False,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
 ) -> dict:
@@ -54,12 +57,16 @@ def train(
     starts = make_warm_starts(rnn, seqs, train_idx, context=context)
     log(f"{len(starts)} oppvarmingsstarter fra treningsepisodene")
 
-    controller = LinearController(seqs.mu.shape[1], rnn.config.hidden_dim, rnn.config.num_actions)
+    extra_dim = rnn.num_position_features if use_positions else 0
+    if use_positions and not extra_dim:
+        raise ValueError("use_positions krever en MDN-RNN med posisjonshode")
+    controller = LinearController(seqs.mu.shape[1], rnn.config.hidden_dim, rnn.config.num_actions, extra_dim)
     init = LinearController.load(init_from).params if init_from else None
     if init is not None:
         log(f"Fortsetter fra {init_from}")
     es = EvolutionStrategy(controller.num_params, population=population, sigma=sigma, lr=lr, seed=seed, init=init)
-    dream_cfg = DreamConfig(horizon=horizon, temperature=temperature)
+    remaining = max(0, GridConfig.max_steps - context - horizon) if charge_remaining else 0
+    dream_cfg = DreamConfig(horizon=horizon, temperature=temperature, remaining_steps=remaining)
     # Fast sett med starter for å måle fremgang i drømmen på samme måte hver gang
     eval_starts = starts.sample(512, np.random.default_rng(seed + 1))
     history = []
@@ -94,6 +101,7 @@ def train(
         "generations": generations, "population": population, "starts_per_generation": starts_per_generation,
         "sigma": sigma, "lr": lr, "context": context, "horizon": horizon, "temperature": temperature, "seed": seed,
         "vae": str(vae_path), "rnn": str(rnn_path), "init_from": str(init_from) if init_from else None,
+        "use_positions": use_positions, "remaining_steps": remaining,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     controller.save(out, hparams=json.dumps(hparams))
@@ -118,12 +126,17 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--real-check-every", type=int, default=25)
     p.add_argument("--history", default=None, help="lagre treningshistorikk som JSON")
     p.add_argument("--init-from", default=None, help="start fra vektene i denne controlleren")
+    p.add_argument("--use-positions", action="store_true",
+                   help="gi controlleren M sin tro om hvor agent og mål er (krever posisjonshode)")
+    p.add_argument("--charge-remaining", action="store_true",
+                   help="den som overlever drømmen betaler skrittkostnaden for resten av en ekte episode")
     p.add_argument("--seed", type=int, default=0)
     a = p.parse_args(argv)
     result = train(
         a.vae, a.rnn, a.data, a.out, generations=a.generations, population=a.population,
         starts_per_generation=a.starts, sigma=a.sigma, lr=a.lr, context=a.context, horizon=a.horizon,
-        temperature=a.temperature, real_check_every=a.real_check_every, init_from=a.init_from, seed=a.seed,
+        temperature=a.temperature, real_check_every=a.real_check_every, init_from=a.init_from,
+        use_positions=a.use_positions, charge_remaining=a.charge_remaining, seed=a.seed,
     )
     if a.history:
         Path(a.history).write_text(json.dumps(result, indent=2))

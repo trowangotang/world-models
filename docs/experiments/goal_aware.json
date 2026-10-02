@@ -1,0 +1,140 @@
+{
+  "mdnrnn_heldout": {
+    "checkpoints/mdnrnn_pos_goal4.pt": {
+      "rand": {
+        "goal_recall": 0.171,
+        "goal_precision": 0.13,
+        "obstacle_recall": 0.614,
+        "obstacle_precision": 0.44,
+        "agent_cell_acc": 0.613
+      },
+      "ctrl": {
+        "goal_recall": 0.258,
+        "goal_precision": 0.184,
+        "obstacle_recall": 0.642,
+        "obstacle_precision": 0.497,
+        "agent_cell_acc": 0.767
+      },
+      "probe_agent_linear_h": 0.798,
+      "probe_goal_linear_h": 0.176
+    }
+  },
+  "real_env_1000": {
+    "steg 4: [z,h], original M": {
+      "episodes": 1000,
+      "goal_rate": 0.082,
+      "obstacle_rate": 0.348,
+      "truncated_rate": 0.57,
+      "mean_return": -0.5658,
+      "mean_length": 30.41
+    },
+    "steg 4b: etter 3 runder": {
+      "episodes": 1000,
+      "goal_rate": 0.057,
+      "obstacle_rate": 0.295,
+      "truncated_rate": 0.648,
+      "mean_return": -0.57248,
+      "mean_length": 33.8
+    },
+    "ny M, [z,h]": {
+      "episodes": 1000,
+      "goal_rate": 0.048,
+      "obstacle_rate": 0.265,
+      "truncated_rate": 0.687,
+      "mean_return": -0.56596,
+      "mean_length": 35.209
+    },
+    "ny M, [z,h] + posisjonstro, rettet dr\u00f8m": {
+      "episodes": 1000,
+      "goal_rate": 0.068,
+      "obstacle_rate": 0.368,
+      "truncated_rate": 0.564,
+      "mean_return": -0.5965100000000001,
+      "mean_length": 30.087
+    },
+    "som over + l\u00e6replan": {
+      "episodes": 1000,
+      "goal_rate": 0.1,
+      "obstacle_rate": 0.441,
+      "truncated_rate": 0.459,
+      "mean_return": -0.6075,
+      "mean_length": 27.191
+    },
+    "diagnostikk: h\u00e5ndlaget g\u00e5 mot m\u00e5let p\u00e5 M sin tro": {
+      "episodes": 1000,
+      "goal_rate": 0.401,
+      "obstacle_rate": 0.56,
+      "truncated_rate": 0.039,
+      "mean_return": -0.23649,
+      "mean_length": 8.71
+    }
+  },
+  "controller_logs": {
+    "controller_pos": {
+      "generation": 300,
+      "fitness_mean": -0.17684027552604675,
+      "fitness_max": -0.15844514966011047,
+      "dream_fitness": -0.17998714745044708,
+      "dream_p_goal": 0.015518132597208023,
+      "dream_p_obstacle": 0.1062515377998352,
+      "action_share": [
+        0.17100000381469727,
+        0.16599999368190765,
+        0.15700000524520874,
+        0.5059999823570251
+      ],
+      "real": {
+        "episodes": 200,
+        "goal_rate": 0.065,
+        "obstacle_rate": 0.255,
+        "truncated_rate": 0.68,
+        "mean_return": -0.5358000000000002,
+        "mean_length": 34.9
+      }
+    },
+    "controller_t0charge_feat": {
+      "generation": 300,
+      "fitness_mean": -0.42927196621894836,
+      "fitness_max": -0.4075944125652313,
+      "dream_fitness": -0.46225157380104065,
+      "dream_p_goal": 0.08397247642278671,
+      "dream_p_obstacle": 0.2298114001750946,
+      "action_share": [
+        0.30000001192092896,
+        0.09799999743700027,
+        0.039000000804662704,
+        0.5630000233650208
+      ],
+      "real": {
+        "episodes": 200,
+        "goal_rate": 0.06,
+        "obstacle_rate": 0.37,
+        "truncated_rate": 0.57,
+        "mean_return": -0.6096500000000001,
+        "mean_length": 30.395
+      }
+    },
+    "controller_t0charge_plain": {
+      "generation": 300,
+      "fitness_mean": -0.43344494700431824,
+      "fitness_max": -0.4116125702857971,
+      "dream_fitness": -0.47162318229675293,
+      "dream_p_goal": 0.0707210823893547,
+      "dream_p_obstacle": 0.21504360437393188,
+      "action_share": [
+        0.1289999932050705,
+        0.039000000804662704,
+        0.0949999988079071,
+        0.7369999885559082
+      ],
+      "real": {
+        "episodes": 200,
+        "goal_rate": 0.07,
+        "obstacle_rate": 0.34,
+        "truncated_rate": 0.59,
+        "mean_return": -0.57835,
+        "mean_length": 31.245
+      }
+    }
+  }
+}

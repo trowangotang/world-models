@@ -10,6 +10,8 @@ Controlleren trenes her i stedet for i det ekte miljøet. Oppsettet følger funn
   * **Forventet belønning.** I stedet for å trekke én hendelse per skritt bruker vi
     sannsynlighetene fra hendelseshodet: forventet belønning i skrittet, og sannsynligheten for
     at episoden fortsatt lever. Det gir mye mindre støy i fitness enn å trekke utfall.
+  * **Resten av episoden.** Med `remaining_steps` betaler en agent som overlever drømmen for
+    skrittene som ville gjenstått i en ekte episode. Ellers er det nesten gratis å gjemme seg.
   * **Temperatur.** Neste z trekkes fra blandingen med temperatur tau. Litt støy gjør det
     vanskeligere for controlleren å utnytte feil i drømmen (et poeng fra artikkelen).
 """
@@ -67,6 +69,10 @@ class DreamConfig:
     reward_goal: float = GridConfig.reward_goal
     reward_obstacle: float = GridConfig.reward_obstacle
     reward_step: float = GridConfig.reward_step
+    # Skritt som gjenstår av en ekte episode når drømmen slutter. Overlever agenten drømmen,
+    # betaler den skrittkostnaden for dem også, fordi det å vente ut tiden ikke er gratis i
+    # virkeligheten (decisions.md D33). 0 = gammel oppførsel.
+    remaining_steps: int = 0
 
 
 @torch.no_grad()
@@ -96,7 +102,10 @@ def dream_fitness(
     action_counts = torch.zeros(controller.num_actions)
     for _ in range(config.horizon):
         h = hidden[0][-1]
-        logits = controller.batched_logits(population, z.view(P, B, D), h.view(P, B, -1))
+        extra = model.position_features(h) if controller.extra_dim else None
+        logits = controller.batched_logits(
+            population, z.view(P, B, D), h.view(P, B, -1), None if extra is None else extra.view(P, B, -1)
+        )
         a = logits.argmax(-1).view(P * B)
         action_counts += torch.bincount(a, minlength=controller.num_actions)
         out = model(z.unsqueeze(1), a.unsqueeze(1), hidden)
@@ -113,6 +122,7 @@ def dream_fitness(
         alive = alive * p[:, EVENT_MOVE]
         nxt = sample_next(out, config.temperature, generator) if config.temperature > 0 else most_likely_mean(out)
         z = nxt[:, 0]
+    total += alive * config.remaining_steps * config.reward_step
     fitness = total.view(P, B).mean(1).numpy()
     if not return_details:
         return fitness

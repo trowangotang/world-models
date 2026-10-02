@@ -13,7 +13,7 @@ from worldmodels.mdnrnn.encode import (
     episode_events,
 )
 from worldmodels.mdnrnn.model import MDNRNN, MDNRNNConfig, mdn_nll, most_likely_mean, sample_next
-from worldmodels.mdnrnn.train import batch_loss, make_batch, split_indices
+from worldmodels.mdnrnn.train import batch_loss, make_batch, oversample_goal_episodes, split_indices
 from worldmodels.vae.model import ConvVAE, VAEConfig
 
 
@@ -194,3 +194,42 @@ def test_dream_image_has_two_rows_per_episode(seqs):
     img = dream_image(model, vae, seqs, long_eps, context=2, steps=2)
     assert img.dtype == np.uint8 and img.shape[2] == 3
     assert img.shape[0] == 2 * len(long_eps) * (128 + 2) + 2
+
+
+def test_goal_cell_is_constant_per_episode_and_old_files_load(seqs, tmp_path):
+    for i in range(len(seqs)):
+        g = seqs.episode(i)["goal_cell"]
+        assert (g == g[0]).all() and g[0] >= 0
+    old = {k: v for k, v in seqs.__dict__.items() if k != "goal_cell"}
+    np.savez(tmp_path / "old.npz", **old)
+    assert (ZSequences.load(tmp_path / "old.npz").goal_cell == -1).all()
+
+
+def test_position_head_loss_is_learnable(seqs):
+    torch.manual_seed(0)
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=16, num_mixtures=2, position_head=True))
+    batch = make_batch(seqs, range(len(seqs)))
+    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+    first = None
+    for _ in range(60):
+        parts = batch_loss(model, batch, False, 1.0, position_weight=1.0)
+        first = first if first is not None else parts["position_ce"].item()
+        opt.zero_grad()
+        parts["loss"].backward()
+        opt.step()
+    assert parts["position_ce"].item() < 0.7 * first
+
+
+def test_models_without_position_head_have_zero_position_loss(seqs):
+    model = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2))
+    parts = batch_loss(model, make_batch(seqs, [0, 1]), False, 1.0, position_weight=5.0)
+    assert parts["position_ce"].item() == 0.0
+
+
+def test_oversampling_repeats_only_goal_episodes(seqs):
+    idx = np.arange(len(seqs))
+    goal = {i for i in idx if (seqs.episode(i)["events"] == EVENT_GOAL).any()}
+    out = oversample_goal_episodes(seqs, idx, 3)
+    assert len(out) == len(idx) + 2 * len(goal)
+    assert set(out[len(idx):]) == goal
+    assert np.array_equal(oversample_goal_episodes(seqs, idx, 1), idx)

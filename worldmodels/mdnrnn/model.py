@@ -34,6 +34,8 @@ class MDNRNNConfig:
     num_mixtures: int = 5
     input_mlp: bool = True
     direct_path: bool = True
+    position_head: bool = False
+    grid_cells: int = 64
 
 
 @dataclass
@@ -44,6 +46,7 @@ class MDNOutput:
     event_logits: torch.Tensor  # (B, T, NUM_EVENTS)
     hidden: tuple[torch.Tensor, torch.Tensor]
     h: torch.Tensor          # (B, T, H) skjult tilstand etter hvert skritt
+    position_logits: torch.Tensor | None = None  # (B, T, 2, celler): agent og mål etter skrittet
 
 
 class MDNRNN(nn.Module):
@@ -73,6 +76,10 @@ class MDNRNN(nn.Module):
         self.mu_head = nn.Linear(head_in, c.num_mixtures * c.latent_dim)
         self.sigma_head = nn.Linear(head_in, c.num_mixtures * c.latent_dim)
         self.event_head = nn.Linear(head_in, NUM_EVENTS)
+        # Hjelpehode: hvor er agenten og målet? Det er lineært fra h med vilje, slik at
+        # posisjonene blir lineært lesbare fra minnet, som er det den lineære controlleren ser.
+        # Brukes bare som ekstra tap under trening (decisions.md D31).
+        self.position_head = nn.Linear(c.hidden_dim, 2 * c.grid_cells) if c.position_head else None
 
     def forward(
         self, z: torch.Tensor, actions: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor] | None = None
@@ -93,7 +100,31 @@ class MDNRNN(nn.Module):
             event_logits=self.event_head(feat),
             hidden=hidden,
             h=h,
+            position_logits=(
+                self.position_head(h).view(B, T, 2, c.grid_cells) if self.position_head is not None else None
+            ),
         )
+
+    @property
+    def num_position_features(self) -> int:
+        return 4 if self.position_head is not None else 0
+
+    def position_features(self, h: torch.Tensor) -> torch.Tensor:
+        """Modellens tro om hvor agenten og målet er, som forventet (rad, kolonne) i [-1, 1].
+
+        h: (..., H) -> (..., 4) = [agent rad, agent kolonne, mål rad, mål kolonne]. Tom (..., 0)
+        uten posisjonshode. Retningen til målet blir da en lineær funksjon av inndata, noe en
+        lineær controller kan bruke direkte (decisions.md D32).
+        """
+        if self.position_head is None:
+            return h.new_zeros(*h.shape[:-1], 0)
+        G = self.config.grid_cells
+        side = int(round(G ** 0.5))
+        probs = F.softmax(self.position_head(h).view(*h.shape[:-1], 2, G), dim=-1)
+        coords = torch.linspace(-1, 1, side, device=h.device)
+        rows = (probs.view(*probs.shape[:-1], side, side).sum(-1) * coords).sum(-1)  # (..., 2)
+        cols = (probs.view(*probs.shape[:-1], side, side).sum(-2) * coords).sum(-1)
+        return torch.stack([rows[..., 0], cols[..., 0], rows[..., 1], cols[..., 1]], dim=-1)
 
     # ------------------------------------------------------------ lagring
     def save(self, path, **extra) -> None:

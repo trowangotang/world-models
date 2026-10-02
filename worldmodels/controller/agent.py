@@ -35,7 +35,9 @@ class WorldModelAgent:
         Med epsilon > 0 byttes hver handling ut med en tilfeldig en med den sannsynligheten.
         Minnet oppdateres alltid med handlingen som faktisk ble tatt."""
         z, _ = self.vae.encode(to_tensor(obs))
-        a = self.controller.act(z, self.hidden[0][-1])
+        h = self.hidden[0][-1]
+        extra = self.rnn.position_features(h) if self.controller.extra_dim else None
+        a = self.controller.act(z, h, extra)
         if epsilon > 0:
             rng = rng if rng is not None else np.random.default_rng()
             explore = rng.random(len(a)) < epsilon

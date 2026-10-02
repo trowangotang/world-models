@@ -273,3 +273,72 @@ For å sjekke om controlleren bare satt fast i steg 4-vektene, trente vi en ny f
 generasjoner) i drømmen fra runde 3. Den endte på 3 % mål, 24 % hindring og 74 % avkortet: enda
 forsiktigere, men ikke bedre på mål. Flaskehalsen er altså drømmens svake kunnskap om mål, ikke
 startpunktet til controlleren. Rådata: `docs/experiments/iterate_results.json`.
+
+## Steg 4c: mål-bevisst drøm
+
+### D31. Årsaken: minnet vet ikke hvor målet er
+Martin valgte å gjøre drømmen mål-bevisst. Før vi endret noe, sjekket vi hvorfor M bommer på mål:
+- VAE-en tegner målet i riktig celle i 81 % av bildene, så informasjonen *finnes* i z.
+- Men verken z eller RNN-minnet h gjør den lesbar: en probe finner målets celle i bare 3 %
+  (tilfeldig gjetting: 1,6 %). Agentens celle kan leses fra h i 73 %.
+- En mål-hendelse skjer når agenten går inn i målets celle. Uten å vite hvor målet er, kan M
+  bare gjette. Og en lineær controller på [z, h] kan heller ikke styre mot noe den ikke ser.
+
+Målets celle lagres nå i z-sekvensene (`goal_cell`, fast gjennom episoden). Eldre filer lastes
+med -1 (ukjent).
+
+### D32. Hjelpehode for posisjoner, og M sin tro som inndata til C
+- **Hjelpehode** (`--position-weight 1`): et lineært lag fra h som predikerer agentens og målets
+  celle. Det er bare et ekstra tap under trening, men tvinger minnet til å holde orden på
+  posisjonene. Merkelappene kommer fra fargene i bildet, samme kilde som hendelsene.
+- **Overvekt av mål-episoder** (`--goal-oversample 4`) ble også prøvd. Det hjalp ikke tydelig
+  (17 % mot 23 % av målene i tilfeldige data), så vi bruker varianten uten.
+- **Posisjonstro til controlleren** (`--use-positions`): fra hjelpehodet regnes forventet
+  (rad, kolonne) for agent og mål, 4 tall i [-1, 1]. Da er retningen til målet en lineær
+  funksjon av inndata, og controlleren er fortsatt lineær (1172 parametre).
+
+M målt på 1000 nye episoder (andel av hendelsene den forutser):
+
+| M | Tilfeldige: mål / hindring | Controllerens: mål / hindring | Målets celle fra h |
+|---|---:|---:|---:|
+| Etter steg 4b | 10 % / 60 % | 17 % / 66 % | 3 % (probe) |
+| **Med hjelpehode** | **23 % / 67 %** | **24 % / 72 %** | **52 %** (hjelpehodet) |
+
+### D33. En håndlaget controller viser at verdensmodellen nå holder
+For å skille "drømmen er for dårlig" fra "søket finner ikke løsningen" laget vi en controller for
+hånd: gå i retningen der M tror målet er, bare ut fra de 4 posisjonstallene. Den er et
+diagnoseverktøy, ikke en løsning, fordi vi har skrevet vektene selv.
+
+I ekte miljø når den målet i **40 %** (tilfeldig: 11 %) med avkastning −0,24 (beste lærte
+til nå: −0,57). Den krasjer fortsatt i 56 %, fordi den ikke ser etter hindringer. Drømmen
+spår 30 % mål og 62 % hindring for den, så drømmen er nå rimelig ærlig om mål.
+
+### D34. Drømmen belønnet å gjemme seg
+Selv om drømmen nå kjente igjen "gå mot målet", ga den høyere fitness til å stå stille ved en
+vegg. To grunner:
+- **Venting var nesten gratis.** En drøm varer 10 skritt, så å overleve kostet bare 0,1. I
+  virkeligheten koster det 0,45 å vente ut hele episoden. `--charge-remaining` lar den som
+  overlever drømmen betale for skrittene som ville gjenstått.
+- **Støy i drømmen overdrev krasj.** Med temperatur 1 steg andelen krasj for "gå mot målet" fra
+  62 % til 69 %. Med temperatur 0 og kostnaden over scorer "gå mot målet" −0,38 mot −0,48 for
+  å vente. Nå peker drømmen i samme retning som virkeligheten.
+
+### D35. Resultat: søket er den nye flaskehalsen
+Evolusjonsstrategien finner likevel ikke "gå mot målet" selv:
+
+| Controller (ekte miljø, 1000 episoder) | Mål | Hindring | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 11 % | 82 % | 7 % | −0,85 |
+| Steg 4 | 8 % | 35 % | 57 % | −0,57 |
+| Steg 4b, etter 3 runder | 6 % | 30 % | 65 % | −0,57 |
+| Ny M, [z, h] | 5 % | 27 % | 69 % | −0,57 |
+| Ny M, [z, h] + posisjonstro, rettet drøm | 7 % | 37 % | 56 % | −0,60 |
+| Som over + læreplan | 10 % | 44 % | 46 % | −0,61 |
+| *Håndlaget "gå mot målet" (diagnostikk)* | *40 %* | *56 %* | *4 %* | *−0,24* |
+
+- Startet i den håndlagde løsningen blir ES der (41 % mål). Startet fra null havner den i
+  "vent ved veggen" hver gang, også med bare de 20 relevante parametrene og 10 ganger mer støy.
+  Det er altså et søkeproblem: "vent" er en bred, trygg dal, og halvveis mot målet er verre enn begge.
+- En læreplan der halvparten av drømmene starter nær målet (høyst 3 skritt unna) hjelper litt:
+  målraten stiger jevnt til 10 %, men den krasjer mer. Skriptene ligger i
+  `docs/experiments/scripts/`, rådata i `docs/experiments/goal_aware.json`.

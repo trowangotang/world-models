@@ -30,6 +30,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 3. MDN-RNN | `worldmodels/mdnrnn` | ✅ ferdig |
 | 4. Controller trent i drømmen | `worldmodels/controller` | ⚠️ virker, men når sjelden målet |
 | 4b. Iterativ trening | `worldmodels/controller/iterate.py` | ⚠️ fjerner utnyttelsen av drømmen, ikke flere mål |
+| 4c. Mål-bevisst drøm | `worldmodels/mdnrnn`, `worldmodels/controller` | ⚠️ drømmen kjenner igjen målet, men søket finner det ikke |
 | 5. Evaluering i ekte miljø | `worldmodels/evaluation` | ⏳ ikke påbegynt |
 
 ## Miljøet: GridDodge
@@ -126,6 +127,21 @@ python -m worldmodels.controller.iterate --vae checkpoints/vae_z32_w10.pt \
 Hver runde samler 5000 ekte episoder med controlleren (30 % tilfeldige handlinger), trener
 MDN-RNN-en og controlleren videre, og måler resultatet. Alt lagres i `checkpoints/iter/`.
 
+### Steg 4c: mål-bevisst drøm
+
+```bash
+# Kod dataene på nytt, så målets celle kommer med (gjør det samme for rollouts fra 4b)
+python -m worldmodels.mdnrnn.encode --data data/rollouts_20k --out data/v2/zseq_20k.npz
+
+# MDN-RNN med hjelpehode for agentens og målets posisjon                    # ~55 min på CPU
+python -m worldmodels.mdnrnn.train --data data/v2/zseq_20k.npz data/v2/zseq_r1.npz \
+    data/v2/zseq_r2.npz data/v2/zseq_r3.npz --epochs 30 --position-weight 1 --out checkpoints/mdnrnn_pos.pt
+
+# Controller med M sin tro om posisjoner, i en drøm som ikke belønner å gjemme seg
+python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_pos.pt --data data/v2/zseq_*.npz \
+    --use-positions --charge-remaining --temperature 0 --generations 300 --starts 256
+```
+
 ## Resultater fra steg 2
 
 ![Rekonstruksjoner](docs/experiments/vae_20k_recon.png)
@@ -213,6 +229,24 @@ nytt i den bedre drømmen. Tre runder, 1000 ekte evalueringsepisoder per runde:
 - **Målet er fortsatt flaskehalsen.** M forutser bare 17 % av mål-hendelsene, og en helt ny
   controller trent i den nye drømmen når målet i bare 3 %. Se D28–D30.
 
+## Resultater fra steg 4c
+
+Vi lærte MDN-RNN-en å holde orden på hvor agenten og målet er, ga controlleren den troen som
+4 ekstra tall, og rettet to feil i drømmen som gjorde det lønnsomt å gjemme seg.
+
+| Controller (ekte miljø, 1000 episoder) | Mål | Hindring | Avkastning |
+|---|---:|---:|---:|
+| Tilfeldig | 11 % | 82 % | −0,85 |
+| Steg 4 | 8 % | 35 % | −0,57 |
+| Ny M + posisjonstro + læreplan | 10 % | 44 % | −0,61 |
+| *Håndlaget "gå mot målet" på M sin tro (diagnostikk)* | *40 %* | *56 %* | *−0,24* |
+
+- **M forutser dobbelt så mange mål** (23 % mot 10 %) og vet hvor målet er i 52 % av skrittene (før: 3 %).
+- **Verdensmodellen holder nå.** En controller som bare går dit M tror målet er, når målet i 40 %,
+  og drømmen rangerer den over "vent ved veggen".
+- **Men søket finner den ikke.** Evolusjonsstrategien havner i "vent ved veggen" fra null, selv
+  med 20 parametre og mer støy. Startet i den håndlagde løsningen blir den der. Se D31–D35.
+
 ## Prosjektstruktur
 
 ```
@@ -223,6 +257,6 @@ worldmodels/
   mdnrnn/       koding til z-sekvenser, MDN-RNN, trening og evaluering
   controller/   lineær controller, evolusjonsstrategi, drømmemiljø, kjøring i ekte miljø og iterativ trening
 tests/          enhetstester (pytest)
-docs/           bilder til README og resultater fra eksperimenter
+docs/           bilder til README, resultater og diagnoseskript fra eksperimenter
 decisions.md    logg over valg og begrunnelser
 ```
