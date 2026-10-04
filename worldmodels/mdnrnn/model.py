@@ -43,6 +43,8 @@ class MDNRNNConfig:
     # Nærsynet spår hendelsene fra bildet og øyets målminne i stedet for fra h (neighbours.py, D52).
     neighbours: bool = False
     neighbour_channels: int = 32
+    # Nærsynet får også minnet h, så det kan se hvor bevegelige hindringer er på vei (D66).
+    neighbour_memory: bool = False
 
 
 @dataclass
@@ -100,7 +102,8 @@ class MDNRNN(nn.Module):
         if c.neighbours:
             from worldmodels.mdnrnn.neighbours import NeighbourEye
 
-            self.neighbours = NeighbourEye(c.latent_dim, c.neighbour_channels, int(round(c.grid_cells ** 0.5)))
+            self.neighbours = NeighbourEye(c.latent_dim, c.neighbour_channels, int(round(c.grid_cells ** 0.5)),
+                                           c.hidden_dim if c.neighbour_memory else 0)
         else:
             self.neighbours = None
 
@@ -185,28 +188,30 @@ class MDNRNN(nn.Module):
 
     def event_probs(
         self, event_logits: torch.Tensor, z: torch.Tensor, goal_memory: torch.Tensor | None, actions: torch.Tensor,
-        agent_map: torch.Tensor | None = None,
+        agent_map: torch.Tensor | None = None, h: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Sannsynlighet for [flytt, mål, hindring] (B, 3) når handlingen tas fra bildet z.
 
         Med nærsyn kommer de fra bildet og øyets målminne (etter at z er sett), ellers fra
         hendelseshodet på h (event_logits, (B, 3)). agent_map er en filtrert tro om agentcellen
-        (tracker.py); uten den brukes det øyet ser i bildet alene."""
+        (tracker.py); uten den brukes det øyet ser i bildet alene. h er minnet før skrittet, som nærsynet
+        trenger med neighbour_memory."""
         if self.neighbours is None:
             return F.softmax(event_logits, dim=-1)
         from worldmodels.mdnrnn.neighbours import event_probs_from_logits
 
-        return event_probs_from_logits(self.neighbour_logits(z, goal_memory, agent_map), actions)
+        return event_probs_from_logits(self.neighbour_logits(z, goal_memory, agent_map, h), actions)
 
     def neighbour_logits(
         self, z: torch.Tensor, goal_memory: torch.Tensor | None, agent_map: torch.Tensor | None = None,
+        h: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Nærsynets logits (B, 2, 4). goal_memory skal allerede inneholde bildet z (se see)."""
         if goal_memory is None:
             goal_memory = self.see(z)[1]
         if agent_map is None:
             agent_map = F.softmax(self.eye(z)[..., 0, :], dim=-1)
-        return self.neighbours(z, F.softmax(goal_memory, dim=-1), agent_map)
+        return self.neighbours(z, F.softmax(goal_memory, dim=-1), agent_map, h if self.config.neighbour_memory else None)
 
     @torch.no_grad()
     def lookahead_obstacle(
@@ -223,7 +228,7 @@ class MDNRNN(nn.Module):
 
         if self.neighbours is not None:
             # Samme regel som event_probs: mål vinner over hindring
-            logits = self.neighbour_logits(z, goal_memory, agent_map)
+            logits = self.neighbour_logits(z, goal_memory, agent_map, hidden[0][-1])
             return (1 - torch.sigmoid(logits[:, 0])) * torch.sigmoid(logits[:, 1])
 
         B, A = z.shape[0], self.config.num_actions
