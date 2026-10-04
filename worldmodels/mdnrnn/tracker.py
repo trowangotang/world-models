@@ -16,6 +16,9 @@ I tillegg teller vi hvor agenten har vært, med glemsel (`visits`). Controlleren
 den har vært i cellen hver handling fører til (`visit_features`). Et skritt tilbake dit den nettopp
 kom fra, eller rett inn i veggen, gir et høyt tall, og controlleren kan lære å la være (D57).
 
+Med hindringsøye (steg 11) husker den også hindringskartet fra forrige bilde, så bevegelsen kan
+regnes ut fra to bilder (`obstacles_before`, D70).
+
 Alt dette er regnet ut fra M sitt øye og agentens egne handlinger, så det virker likt i drømmen og
 i det ekte miljøet.
 """
@@ -36,9 +39,18 @@ class EyeMemory:
     goal: torch.Tensor     # (B, celler) summen av log-sannsynlighetene for målet (MDNRNN.see)
     agent: torch.Tensor    # (B, celler) troen om agentcellen, summerer til 1
     visits: torch.Tensor   # (B, celler) troen fra tidligere skritt, summert med glemsel
+    # Hindringsøyets kart (B, celler) i siste bilde og bildet før det. None uten hindringsøye, og
+    # obstacles_before er None før to bilder er sett.
+    obstacles: torch.Tensor | None = None
+    obstacles_before: torch.Tensor | None = None
+
+    FIELDS = ("goal", "agent", "visits", "obstacles", "obstacles_before")
 
     def __len__(self) -> int:
         return len(self.goal)
+
+    def _map(self, fn) -> "EyeMemory":
+        return EyeMemory(*(None if (x := getattr(self, f)) is None else fn(x) for f in self.FIELDS))
 
     @classmethod
     def fresh(cls, n: int, cells: int) -> "EyeMemory":
@@ -47,22 +59,28 @@ class EyeMemory:
 
     @classmethod
     def concat(cls, parts: list["EyeMemory"]) -> "EyeMemory":
-        return cls(*(torch.cat([getattr(m, f) for m in parts]) for f in ("goal", "agent", "visits")))
+        out = []
+        for f in cls.FIELDS:
+            xs = [getattr(m, f) for m in parts]
+            if any(x is None for x in xs) and not all(x is None for x in xs):
+                raise ValueError(f"kan ikke slå sammen hukommelser der bare noen har {f}")
+            out.append(None if xs[0] is None else torch.cat(xs))
+        return cls(*out)
 
     def subset(self, idx) -> "EyeMemory":
-        return EyeMemory(self.goal[idx], self.agent[idx], self.visits[idx])
+        return self._map(lambda x: x[idx])
 
     def repeat(self, n: int) -> "EyeMemory":
         """Samme hukommelse n ganger etter hverandre (én kopi per kandidat i drømmen)."""
-        return EyeMemory(self.goal.repeat(n, 1), self.agent.repeat(n, 1), self.visits.repeat(n, 1))
+        return self._map(lambda x: x.repeat(n, 1))
 
     def clone(self) -> "EyeMemory":
-        return EyeMemory(self.goal.clone(), self.agent.clone(), self.visits.clone())
+        return self._map(lambda x: x.clone())
 
     def moved(self, actions: torch.Tensor) -> "EyeMemory":
         """Flytt troen om agenten med handlingene (B,). Kalles etter at handlingen er valgt."""
         agent = move_belief(self.agent)[torch.arange(len(actions)), actions]
-        return EyeMemory(self.goal, agent, self.visits)
+        return EyeMemory(self.goal, agent, self.visits, self.obstacles, self.obstacles_before)
 
 
 def move_belief(belief: torch.Tensor) -> torch.Tensor:
@@ -105,7 +123,11 @@ def observe(model, z: torch.Tensor, memory: EyeMemory | None) -> tuple[torch.Ten
     agent = agent / agent.sum(-1, keepdim=True)
     visits = agent if memory is None else VISIT_DECAY * memory.visits + agent
     tracked = torch.cat([belief_positions(agent), seen[:, 2:]], dim=-1)
-    return seen, tracked, EyeMemory(goal, agent, visits)
+    obstacles = before = None
+    if getattr(model, "obstacle_eye", None) is not None:
+        obstacles = torch.sigmoid(model.obstacle_eye(z))
+        before = None if memory is None else memory.obstacles
+    return seen, tracked, EyeMemory(goal, agent, visits, obstacles, before)
 
 
 def visit_features(memory: EyeMemory) -> torch.Tensor:

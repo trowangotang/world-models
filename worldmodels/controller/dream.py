@@ -175,7 +175,8 @@ def dream_fitness(
         out = model(z.unsqueeze(1), a.unsqueeze(1), hidden)
         hidden = out.hidden
         p = model.event_probs(out.event_logits[:, 0], z, None if memory is None else memory.goal, a,
-                              None if memory is None else memory.agent, h)
+                              None if memory is None else memory.agent, h,
+                              None if memory is None else memory.obstacles_before)
         if memory is not None:
             memory = memory.moved(a)
         expected = (
