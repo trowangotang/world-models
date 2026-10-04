@@ -831,3 +831,61 @@ ikke selve utviklingen". Fra nå av: idéer prøves på lite data (rundt 2000 ep
 kjøringer (rundt 25 generasjoner), sjekkpunkter finjusteres i stedet for å trenes fra null, og det
 kjøres én full trening med én seed per steg, bare for tallene som vises fram. Steg 10 brukte
 allerede finjustering (D65) og diagnoseskript før trening (D67), og den ekstra seeden ble stoppet.
+
+## Steg 11: øyet leser hindringene
+
+Martin: "prøv det" (forslaget i D69).
+
+### D70. Hindringskart fra z, og bevegelsen fra to bilder
+I steg 10 måtte nærsynet lese hvor hindringene er på vei fra M sitt minne h, og så bare 28 % av dem.
+Nå deler vi det i to små, rene oppgaver (`mdnrnn/obstacles.py`):
+
+1. **Hindringsøyet** leser et 8x8-kart over hindringene fra z, formet som øyet fra steg 6.
+2. **Bevegelsen** er et lite konvolusjonsnett som spår neste kart fra kartet i forrige og dette
+   bildet. Mer trengs ikke: en hindring som har flyttet seg, fortsetter, og snur bare ved noe like
+   ved. Tre lag 3x3 ser langt nok.
+
+Faren i en retning er hindring i nabocellen nå eller i det spådde kartet, veid med troen om hvor
+agenten står (sporingen fra steg 8). Den erstatter nærsynets hindringsdel i drømmen og i fremsynet.
+Nærsynet spår fortsatt målet. Øyets hukommelse (`EyeMemory`) husker kartet fra forrige bilde.
+
+Kodingen lagrer nå hindringskartet for hvert bilde (`obstacles`). Øyet og bevegelsen trenes alene,
+med resten av M fryst, på agentepisodene fra steg 10: **ett minutt på CPU.**
+
+| Fare i nabocellen (valideringsbilder) | Står der nå | På vei inn | Falsk alarm |
+|---|---:|---:|---:|
+| Steg 10: nærsyn med minne | 89 % | 25 % | 3,3 % |
+| **Steg 11: hindringsøye + bevegelse** | **99 %** | **57 %** | 1,2 % |
+| Samme, fra andre bilde (bevegelsen er sett) | 100 % | 75 % | 1,2 % |
+| Tak: sanne kart + bevegelse | 100 % | 57 % | 0,5 % |
+
+Øyet finner 98 % av hindringene. Bevegelsen fra øyets kart er like god som fra de sanne kartene,
+så det som mangler er første bilde, der ingen kan vite hvor hindringene skal.
+(`docs/experiments/scripts/obstacle_eye.py` var den første raske testen.)
+
+### D71. Ingen ny trening av controlleren
+Controlleren får faren som fremsyn (4 tall), akkurat som før. Den forstår dem allerede, så vi bytter
+bare M og beholder steg 10-controlleren. En kort finjustering i den nye drømmen (25 generasjoner fra
+steg 10-vektene, `--init-from`) gjorde det verre: med samme søkebredde som før (sigma 0,5) kastet
+CMA-ES bort startpunktet og var bare tilbake på 72 % etter 25 generasjoner. Den er droppet. Steg 11
+er altså en bedre verdensmodell, ikke en ny agent.
+
+### D72. Resultat: 90 % mål med bevegelige hindringer
+2000 nye brett med tre bevegelige hindringer (`docs/evaluation_moving/report.md`):
+
+| | Mål | Krasj | Avkastning |
+|---|---:|---:|---:|
+| Steg 8 | 78,5 % | 21,6 % | +0,53 |
+| Steg 10 | 83,0 % | 17,0 % | +0,62 |
+| **Steg 11** | **89,8 % (88–91)** | **10,1 % (9–11)** | **+0,75** |
+| Juks: mot målet, unngår faren | 98,7 % | 0,1 % | +0,93 |
+
+- Parvis mot steg 10: +6,8 poeng mål (+5,5 til +8,1). 162 brett bare steg 11 klarte, 27 bare steg 10.
+- Krasj i skritt 3–9 nesten halvert (190 → 89). I skritt 1–2 færre (135 → 102), men der ser ingen
+  bevegelsen ennå.
+- Ved 8+ skritt til målet: 79 % mot 68 %.
+- **Drømmen er blitt forsiktig:** den lover 9,1 % krasj innen 10 skritt, og 3,8 % skjer. Den skiller
+  likevel farlige og trygge situasjoner bedre enn før (AUC 0,91 mot 0,84). Når hindringskartet blir
+  uskarpt utover i drømmen, ser hindringene ut til å være flere steder.
+- **Det som gjenstår:** krasj i de første skrittene, og at drømmen overdriver krasjfaren. Det siste
+  kan bety at en controller trent helt i den nye drømmen blir for redd.

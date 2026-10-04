@@ -40,4 +40,13 @@
 <circle cx="316.0" cy="47.4" r="6.3" fill="#ff7f0e" fill-opacity="0.7"/>
 <circle cx="348" cy="66" r="4" fill="#ff7f0e"/>
 <text x="358" y="70" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 10: bevegelige hindringer</text>
+<polyline fill="none" stroke="#2ca02c" stroke-width="1.5" points="63.1,142.1 116.6,170.0 162.0,147.1 218.0,100.0 275.2,48.5 314.9,43.1"/>
+<circle cx="63.1" cy="142.1" r="2.9" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="116.6" cy="170.0" r="2.5" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="162.0" cy="147.1" r="2.7" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="218.0" cy="100.0" r="3.0" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="275.2" cy="48.5" r="4.1" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="314.9" cy="43.1" r="6.3" fill="#2ca02c" fill-opacity="0.7"/>
+<circle cx="348" cy="86" r="4" fill="#2ca02c"/>
+<text x="358" y="90" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 11: øyet leser hindringene</text>
 </svg>

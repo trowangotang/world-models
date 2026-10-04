@@ -91,7 +91,7 @@ def dream_from(vae, rnn, controller, z, hidden, memory, env, horizon: int) -> li
                                        memory, track_goal=True, track=controller.track)
         a = controller.act(z, hidden[0][-1], extra)
         out = rnn(z.unsqueeze(1), a.unsqueeze(1), hidden)
-        p = rnn.event_probs(out.event_logits[:, 0], z, memory.goal, a, memory.agent, hidden[0][-1])[0]
+        p = rnn.event_probs(out.event_logits[:, 0], z, memory.goal, a, memory.agent, hidden[0][-1], memory.obstacles_before)[0]
         belief = memory.agent[0].numpy().copy()
         memory = memory.moved(a)
         hidden = out.hidden

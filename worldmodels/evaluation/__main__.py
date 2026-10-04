@@ -54,6 +54,8 @@ AGENTS = (
 MOVING_AGENTS = (
     ("Steg 8: sporing", "mdnrnn_sense.pt", "controller_track.npz", False),
     ("Steg 10: bevegelige hindringer", "mdnrnn_moving.pt", "controller_moving.npz", False),
+    # Samme controller, men M leser hindringene og regner ut bevegelsen fra to bilder (D70)
+    ("Steg 11: øyet leser hindringene", "mdnrnn_obstacles.pt", "controller_moving.npz", False),
 )
 
 

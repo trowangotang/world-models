@@ -39,6 +39,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 8. Slutt på pendlingen | `worldmodels/mdnrnn/tracker.py` | ✅ når målet i 93 %, krasjer i 7 %, pendler aldri |
 | 9. Vis drømmen | `worldmodels/dreamview` | ✅ [interaktiv side](docs/drom/index.html) med drøm og virkelighet side om side |
 | 10. Bevegelige hindringer | `worldmodels/env`, `worldmodels/mdnrnn/neighbours.py` | ✅ når målet i 83 % (steg 8: 79 %), drømmen er ærlig om krasj |
+| 11. Øyet leser hindringene | `worldmodels/mdnrnn/obstacles.py` | ✅ når målet i 90 % med bevegelige hindringer, uten ny controller-trening |
 
 ## Miljøet: GridDodge
 
@@ -239,6 +240,18 @@ python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_moving.pt --data
 # Evaluering i verdenen med bevegelige hindringer, og hvor krasjene skjer
 python -m worldmodels.evaluation --moving 3 --out docs/evaluation_moving
 PYTHONPATH=. python docs/experiments/scripts/crash_check.py mdnrnn_sense.pt:controller_track.npz mdnrnn_moving.pt:controller_moving.npz
+```
+
+### Steg 11: øyet leser hindringene
+
+```bash
+# Kod agentdataene på nytt, så hindringskartet for hvert bilde kommer med (~40 s)
+python -m worldmodels.mdnrnn.encode --data data/moving/rollouts_agent --out data/moving/zseq_agent.npz
+# Hindringsøyet og bevegelsen, lagt til steg 10-modellen (~1 min)
+python -m worldmodels.mdnrnn.obstacles --rnn checkpoints/mdnrnn_moving.pt --data data/moving/zseq_agent.npz \
+    --out checkpoints/mdnrnn_obstacles.pt
+# Ingen ny controller: steg 10-controlleren bruker den nye M direkte. Evaluering som i steg 10.
+python -m worldmodels.evaluation --moving 3 --out docs/evaluation_moving
 ```
 
 ## Resultater fra steg 2
@@ -529,7 +542,7 @@ farge som de andre, så ett bilde viser ikke hvor de er på vei. Agenten må hus
 
 ![Bevegelige hindringer](docs/evaluation_moving/final_strips.png)
 
-*Steg 10-agenten med bevegelige hindringer: øverst når den målet, nederst flytter en hindring seg inn i den.*
+*Sluttagenten med bevegelige hindringer: øverst når den målet, i midten flytter en hindring seg inn i den, nederst er målet i hjørnet stengt inne og tiden går ut.*
 
 Det nye er nesten bare i M: den er finjustert på data fra den nye verdenen, og nærsynet får M sitt
 minne h, så det kan spå "fare" (en hindring er der nå, eller kommer dit i neste skritt) i stedet for
@@ -550,6 +563,30 @@ bare "hindring". Controlleren er trent i den nye drømmen med samme oppsett som 
 
 Full rapport: [`docs/evaluation_moving/report.md`](docs/evaluation_moving/report.md). Se D64–D69.
 
+## Steg 11: øyet leser hindringene
+
+I steg 10 måtte M gjette hvor hindringene var på vei ut fra minnet sitt. Nå leser et nytt øye et kart
+over hindringene fra hvert bilde, og et lite nett regner ut hvor de er på vei ved å sammenligne
+kartet med forrige bilde. Faren for krasj i hver retning kommer derfra.
+
+| Fare i nabocellen | Står der nå | På vei inn |
+|---|---:|---:|
+| Steg 10 | 89 % | 25 % |
+| **Steg 11** | **99 %** | **57 %** (75 % fra andre bilde) |
+
+Det tar ett minutt å trene, og controlleren fra steg 10 brukes som den er:
+
+| Policy (2000 brett, 3 bevegelige hindringer) | Mål | Krasj | Avkastning |
+|---|---:|---:|---:|
+| Steg 10 | 83 % | 17 % | +0,62 |
+| **Steg 11: øyet leser hindringene** | **90 % (88–91)** | **10 % (9–11)** | **+0,75** |
+| *Juks: mot målet, unngår faren* | 99 % | 0 % | +0,93 |
+
+- **+6,8 poeng mål** mot steg 10 på de samme brettene, uten å trene controlleren på nytt. En bedre
+  verdensmodell gjorde agenten bedre med en gang.
+- **Det som gjenstår:** krasj i første skritt, før noen kan se hvor hindringene går, og en drøm som
+  nå overdriver krasjfaren (lover 9 %, 4 % skjer). Se D70–D72.
+
 ## Prosjektstruktur
 
 ```
@@ -557,7 +594,7 @@ worldmodels/
   env/          GridDodge-miljøet og forhåndsvisning
   data/         tilfeldig policy og innsamling/lagring av rollouts
   vae/          modell, tap, datasett, trening og evaluering av VAE-en
-  mdnrnn/       koding til z-sekvenser, MDN-RNN, øyet, nærsynet, sporing, trening og evaluering
+  mdnrnn/       koding til z-sekvenser, MDN-RNN, øyet, nærsynet, sporing, hindringsøyet, trening og evaluering
   controller/   lineær controller og inndata, ES og CMA-ES, drømmemiljø, kjøring i ekte miljø, iterativ trening
   evaluation/   steg 5: grunnlinjer, evaluering med intervaller, drøm mot virkelighet, figurer og rapport
   dreamview/    steg 9: tar opp drøm og virkelighet og lager den interaktive siden

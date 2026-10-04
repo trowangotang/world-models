@@ -73,4 +73,15 @@
 <circle cx="427.5" cy="124.5" r="3" fill="#9467bd"/>
 <line x1="500" y1="126" x2="520" y2="126" stroke="#9467bd" stroke-width="2"/>
 <text x="526" y="130" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 10: bevegelige hindringer</text>
+<polyline fill="none" stroke="#8c564b" stroke-width="2" points="112.5,47.6 217.5,57.0 322.5,71.7 427.5,93.5"/>
+<line x1="112.5" y1="52.2" x2="112.5" y2="44.7" stroke="#8c564b" stroke-opacity="0.5"/>
+<circle cx="112.5" cy="47.6" r="3" fill="#8c564b"/>
+<line x1="217.5" y1="63.4" x2="217.5" y2="52.2" stroke="#8c564b" stroke-opacity="0.5"/>
+<circle cx="217.5" cy="57.0" r="3" fill="#8c564b"/>
+<line x1="322.5" y1="80.2" x2="322.5" y2="64.9" stroke="#8c564b" stroke-opacity="0.5"/>
+<circle cx="322.5" cy="71.7" r="3" fill="#8c564b"/>
+<line x1="427.5" y1="103.6" x2="427.5" y2="84.7" stroke="#8c564b" stroke-opacity="0.5"/>
+<circle cx="427.5" cy="93.5" r="3" fill="#8c564b"/>
+<line x1="500" y1="146" x2="520" y2="146" stroke="#8c564b" stroke-width="2"/>
+<text x="526" y="150" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 11: øyet leser hindringene</text>
 </svg>

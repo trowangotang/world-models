@@ -46,7 +46,8 @@ def world_features(
         parts.append(tracked if track else seen)
     if lookahead:
         agent_map = memory.agent if track else None
-        parts.append(model.lookahead_obstacle(z, hidden, None if memory is None else memory.goal, agent_map))
+        parts.append(model.lookahead_obstacle(z, hidden, None if memory is None else memory.goal, agent_map,
+                                              None if memory is None else memory.obstacles_before))
     if track:
         parts.append(visit_features(memory))
     return (torch.cat(parts, dim=-1) if parts else None), memory
