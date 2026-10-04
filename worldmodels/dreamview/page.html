@@ -126,6 +126,7 @@ tr.chosen td:first-child::after { content: "  valgt"; font: 500 0.7rem var(--fon
 .notes { display: grid; gap: 10px; font-size: 0.9rem; color: var(--muted); align-content: start; }
 .notes strong { color: var(--fg); font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--muted); }
+.legend span.dashed::before { background: transparent; border: 2px dashed var(--obstacle); width: 6px; height: 6px; }
 .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
 footer { font-size: 0.85rem; color: var(--muted); }
 footer a { color: var(--fg); }
@@ -142,9 +143,10 @@ footer a { color: var(--fg); }
 
 <div class="wrap">
   <header class="intro">
-    <span class="label">World Models i GridDodge · steg 9</span>
+    <span class="label">World Models i GridDodge · steg 12</span>
     <h1>Agentens drøm</h1>
     <p>Agenten har aldri fått reglene for spillet. Den har lært en modell av verden fra bilder, og den ble trent inne i drømmene til den modellen. Her ser du hva den ser, hva den tror og hva den drømmer om i hvert skritt av ekte episoder.</p>
+    <p>Tre av hindringene går fram og tilbake, men har samme farge som de andre. Ett bilde viser ikke hvor de er på vei. Agenten leser et kart over hindringene fra hvert bilde og regner ut hvor de skal ved å sammenligne med forrige bilde.</p>
     <p>Hvert skritt starter en ny drøm: modellen spår de neste ti bildene mens agenten velger handlinger i drømmen. Ved siden av ser du hva som faktisk skjer når de samme handlingene tas i det ekte spillet.</p>
   </header>
 
@@ -155,6 +157,7 @@ footer a { color: var(--fg); }
       <span style="--c: var(--goal)">mål</span>
       <span style="--c: var(--obstacle)">hindring</span>
       <span style="--c: var(--dream)">drøm</span>
+      <span class="dashed">der hindringen står om ett skritt</span>
     </div>
   </section>
 
@@ -169,6 +172,7 @@ footer a { color: var(--fg); }
         <div class="head"><h2>Det agenten ser</h2></div>
         <canvas id="cSeen" width="256" height="256" aria-label="Bildet etter VAE-en, med agentens tro"></canvas>
         <div class="seg" id="overlay" role="group" aria-label="Vis tro">
+          <button type="button" data-o="obstacles" aria-pressed="false" hidden>Hindringene</button>
           <button type="button" data-o="belief" aria-pressed="true">Filteret</button>
           <button type="button" data-o="eye" aria-pressed="false">Øyet alene</button>
           <button type="button" data-o="goal" aria-pressed="false">Målminnet</button>
@@ -223,7 +227,7 @@ footer a { color: var(--fg); }
         </div>
       </div>
       <div class="notes">
-        <p><strong>Krasjrisiko</strong> er modellens fremsyn: hvor sannsynlig det er å treffe en hindring med hver handling, lest fra bildet.</p>
+        <p><strong>Krasjrisiko</strong> er modellens fremsyn: hvor sannsynlig det er å treffe en hindring med hver handling. Den leses fra hindringskartet nå og kartet modellen spår for neste skritt.</p>
         <p><strong>Nylig besøkt</strong> sier hvor mye agenten har vært i cellen handlingen fører til. Å gå tilbake eller inn i veggen gir et høyt tall. Det er dette som stoppet pendlingen i steg 8.</p>
         <p><strong>Skåren</strong> er en lineær sum av det agenten ser og tror. Høyest skår vinner.</p>
       </div>
@@ -249,7 +253,7 @@ function board() { return DATA.boards[state.b]; }
 function step() { return board().steps[state.t]; }
 
 // ---------- tegning
-function drawBoard(ctx, b, pos, path, ended) {
+function drawBoard(ctx, b, pos, path, ended, obstacles, next) {
   const W = ctx.canvas.width, c = W / N;
   ctx.fillStyle = css("--board"); ctx.fillRect(0, 0, W, W);
   ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
@@ -258,7 +262,14 @@ function drawBoard(ctx, b, pos, path, ended) {
     ctx.beginPath(); ctx.moveTo(0, i * c + 0.5); ctx.lineTo(W, i * c + 0.5); ctx.stroke();
   }
   ctx.fillStyle = css("--obstacle");
-  for (const [r, q] of b.obstacles) ctx.fillRect(q * c, r * c, c, c);
+  for (const [r, q] of obstacles || b.obstacles) ctx.fillRect(q * c, r * c, c, c);
+  if (next) {
+    // Stiplet ramme der en hindring står etter skrittet, men ikke nå: den er på vei dit
+    const now = new Set((obstacles || b.obstacles).map(([r, q]) => r * N + q));
+    ctx.strokeStyle = css("--obstacle"); ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+    for (const [r, q] of next) if (!now.has(r * N + q)) ctx.strokeRect(q * c + 3, r * c + 3, c - 6, c - 6);
+    ctx.setLineDash([]);
+  }
   ctx.fillStyle = css("--goal"); ctx.fillRect(b.goal[1] * c, b.goal[0] * c, c, c);
   if (path && path.length > 1) {
     ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 3; ctx.lineJoin = "round";
@@ -297,6 +308,26 @@ function drawHeat(ctx, values, rgb) {
   return [Math.floor(best / N), best % N, values[best]];
 }
 
+// Hindringsøyet: rødt der øyet ser en hindring nå, lilla ramme der modellen tror en hindring kommer
+function drawObstacles(ctx, s) {
+  const W = ctx.canvas.width, c = W / N;
+  s.omap.forEach((v, i) => {
+    if (v < 10) return;
+    ctx.fillStyle = `rgba(255, 90, 90, ${Math.min(0.8, 0.2 + v / 100 * 0.6)})`;
+    ctx.fillRect((i % N) * c, Math.floor(i / N) * c, c, c);
+  });
+  const arriving = [];
+  s.onext.forEach((v, i) => { if (v >= 50 && s.omap[i] < 50) arriving.push(i); });
+  ctx.strokeStyle = css("--dream"); ctx.lineWidth = 3;
+  for (const i of arriving) ctx.strokeRect((i % N) * c + 2.5, Math.floor(i / N) * c + 2.5, c - 5, c - 5);
+  const seen = s.omap.filter((v) => v >= 50).length;
+  const now = new Set(s.obs.map(([r, q]) => r * N + q));
+  const truth = new Set(s.next.filter(([r, q]) => !now.has(r * N + q)).map(([r, q]) => r * N + q));
+  const hits = arriving.filter((i) => truth.has(i)).length;
+  if (!truth.size && !arriving.length) return `Øyet ser ${seen} hindringer. Modellen tror ingen av dem flytter seg inn i en tom celle i dette skrittet, og det stemmer.`;
+  return `Øyet ser ${seen} hindringer. Lilla ramme: der modellen tror en hindring kommer i neste skritt (${arriving.length} celler, ${hits} av ${truth.size} riktige).`;
+}
+
 const pct = (x) => `${Math.round(x * 100)} %`;
 const cell = ([r, c]) => `(${r}, ${c})`;
 
@@ -306,14 +337,16 @@ function render() {
   const path = b.steps.slice(0, state.t + 1).map((x) => x.pos);
   const last = state.t === b.steps.length - 1;
 
-  drawBoard($("cReal").getContext("2d"), b, s.pos, path, null);
+  drawBoard($("cReal").getContext("2d"), b, s.pos, path, null, s.obs, s.next);
   $("realReadout").textContent = `seed ${b.seed}`;
   $("realCaption").textContent = `Agenten står i ${cell(s.pos)} og velger ${ARROWS[s.action]}. Da ${EVENT[s.event]} den${last ? ", og episoden er over." : "."}`;
 
   const sctx = $("cSeen").getContext("2d");
   drawSprite(sctx, state.b, s.recon);
   let caption = "Bildet etter at det er komprimert til 32 tall og tegnet opp igjen av VAE-en.";
-  if (state.overlay === "belief") {
+  if (state.overlay === "obstacles" && s.omap) {
+    caption = drawObstacles(sctx, s);
+  } else if (state.overlay === "belief") {
     const [r, q, v] = drawHeat(sctx, s.belief, "120, 200, 255");
     caption = `Filteret tror agenten står i ${cell([r, q])} (${v} %). Det bruker både bildet og handlingen agenten nettopp tok.`;
   } else if (state.overlay === "eye") {
@@ -337,7 +370,8 @@ function render() {
     const realPath = [s.pos, ...s.dream.slice(0, state.k + 1).map((x) => x.rp).filter(Boolean)];
     const lastReal = realPath[realPath.length - 1];
     const ended = s.dream.slice(0, state.k + 1).map((x) => x.re).find((e) => e === "goal" || e === "obstacle");
-    drawBoard(cctx, b, lastReal, realPath, ended);
+    const realObs = s.dream.slice(0, state.k + 1).map((x) => x.ro).filter(Boolean).pop() || s.obs;
+    drawBoard(cctx, b, lastReal, realPath, ended, realObs, null);
     $("checkCaption").textContent = d.re ? `I det ekte spillet ${EVENT[d.re]} agenten med samme handling.` :
       `Episoden var allerede over i det ekte spillet (${EVENT[ended] || "avkortet"}).`;
   }
@@ -405,6 +439,9 @@ function buildPicker() {
 
 function selectBoard(i) {
   stop();
+  const hasMap = !!DATA.boards[i].steps[0].omap;
+  document.querySelector('#overlay [data-o="obstacles"]').hidden = !hasMap;
+  if (!hasMap && state.overlay === "obstacles") setOverlay("belief");
   state.b = i; state.t = 0; state.k = 0;
   $("step").max = board().steps.length - 1;
   document.querySelectorAll(".chip").forEach((el) => el.setAttribute("aria-pressed", String(+el.dataset.i === i)));
@@ -431,16 +468,19 @@ function stop() { clearInterval(state.timer); state.timer = null; $("play").text
 $("play").addEventListener("click", play);
 $("step").addEventListener("input", (e) => { stop(); state.t = +e.target.value; state.k = 0; render(); });
 $("dstep").addEventListener("input", (e) => { stop(); state.k = +e.target.value; render(); });
-$("overlay").addEventListener("click", (e) => {
-  const o = e.target.closest("button")?.dataset.o; if (!o) return;
+function setOverlay(o) {
   state.overlay = o;
   document.querySelectorAll("#overlay button").forEach((el) => el.setAttribute("aria-pressed", String(el.dataset.o === o)));
-  render();
+}
+$("overlay").addEventListener("click", (e) => {
+  const o = e.target.closest("button")?.dataset.o; if (!o) return;
+  setOverlay(o); render();
 });
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
 new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
 buildPicker();
+if (DATA.boards[0]?.steps[0].omap) setOverlay("obstacles");
 let loaded = 0;
 sheets.forEach((img) => img.addEventListener("load", () => { if (++loaded === sheets.length) { $("strip").dataset.key = ""; render(); } }));
 selectBoard(0);
