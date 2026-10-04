@@ -49,6 +49,12 @@ class MDNRNNConfig:
     # nærsynets hindringsdel (obstacles.py, D70).
     obstacle_eye: bool = False
     obstacle_channels: int = 32
+    # Kompasset (førsteperson, steg 14): hvor er målet sett fra agenten, og har den sett det? Leses fra
+    # minnet før skrittet og bildet nå, så det virker også når målet er bak agenten (D77).
+    compass: bool = False
+
+
+COMPASS_SCALE = 7.0  # celler; kompasset gir (fram, høyre) delt på dette, altså omtrent i [-1, 1]
 
 
 @dataclass
@@ -118,6 +124,10 @@ class MDNRNN(nn.Module):
             self.motion = Motion(c.obstacle_channels, side)
         else:
             self.obstacle_eye = self.motion = None
+        self.compass_net = (
+            nn.Sequential(nn.Linear(c.hidden_dim + c.latent_dim, c.hidden_dim), nn.ReLU(), nn.Linear(c.hidden_dim, 3))
+            if c.compass else None
+        )
 
     def forward(
         self, z: torch.Tensor, actions: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor] | None = None
@@ -185,6 +195,15 @@ class MDNRNN(nn.Module):
         side = int(round(self.config.grid_cells ** 0.5))
         combined = torch.stack([logits[..., 0, :], memory], dim=-2)
         return expected_positions(combined, side), memory
+
+    def compass_logits(self, z: torch.Tensor, h_before: torch.Tensor) -> torch.Tensor:
+        """(..., D) og minnet før skrittet (..., H) -> (..., 3): fram, høyre (skalert) og logit for sett."""
+        return self.compass_net(torch.cat([h_before, z], dim=-1))
+
+    def compass_features(self, z: torch.Tensor, h_before: torch.Tensor) -> torch.Tensor:
+        """Kompasset som controlleren får: (..., 3) = [fram, høyre, sannsynlighet for at målet er sett]."""
+        out = self.compass_logits(z, h_before)
+        return torch.cat([out[..., :2], torch.sigmoid(out[..., 2:])], dim=-1)
 
     @property
     def num_belief_features(self) -> int:

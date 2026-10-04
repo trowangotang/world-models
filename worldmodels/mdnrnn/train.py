@@ -33,6 +33,8 @@ class Batch:
     agent_cell: torch.Tensor # (B, T+1)
     goal_cell: torch.Tensor  # (B, T+1), -1 der den er ukjent
     near_obstacle: torch.Tensor  # (B, T+1, 4), -1 der det er ukjent
+    goal_ego: torch.Tensor   # (B, T+1, 2) målet sett fra agenten (førsteperson)
+    goal_known: torch.Tensor # (B, T+1) 1 når målet har vært synlig i dette eller et tidligere bilde, -1 = ukjent
     mask: torch.Tensor       # (B, T) True for ekte skritt, False for utfylling
 
     def inputs(self, sample: bool, generator: torch.Generator | None = None) -> torch.Tensor:
@@ -59,6 +61,8 @@ def make_batch(seqs: ZSequences, indices) -> Batch:
     agent = np.full((B, T + 1), -1, np.int64)
     goal = np.full((B, T + 1), -1, np.int64)
     near = np.full((B, T + 1, eps[0]["near_obstacle"].shape[-1]), -1, np.int64)
+    ego = np.zeros((B, T + 1, 2), np.float32)
+    known = np.full((B, T + 1), -1, np.int64)
     mask = np.zeros((B, T), bool)
     for b, e in enumerate(eps):
         n = len(e["actions"])
@@ -69,9 +73,12 @@ def make_batch(seqs: ZSequences, indices) -> Batch:
         agent[b, :n + 1] = e["agent_cell"]
         goal[b, :n + 1] = e["goal_cell"]
         near[b, :n + 1] = e["near_obstacle"]
+        ego[b, :n + 1] = e["goal_ego"]
+        visible = e["goal_visible"]
+        known[b, :n + 1] = np.maximum.accumulate(visible) if (visible >= 0).all() else -1
         mask[b, :n] = True
     t = torch.from_numpy
-    return Batch(t(z_mu), t(z_logvar), t(actions), t(events), t(agent), t(goal), t(near), t(mask))
+    return Batch(t(z_mu), t(z_logvar), t(actions), t(events), t(agent), t(goal), t(near), t(ego), t(known), t(mask))
 
 
 def split_indices(n: int, val_fraction: float = 0.1, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
@@ -110,6 +117,7 @@ def batch_loss(
     mse_weight: float = 0.0,
     position_weight: float = 0.0,
     obstacle_weight: float = 0.0,
+    compass_weight: float = 0.0,
 ) -> dict[str, torch.Tensor]:
     """nll + event_weight * hendelsestap + mse_weight * kvadratfeil for forventet z_{t+1}.
 
@@ -117,7 +125,8 @@ def batch_loss(
     få lav nll ved å treffe de mange dimensjonene som ikke endrer seg, og være slapp på
     de få som koder hvor agenten flyttet seg (se decisions.md).
     """
-    out = model(batch.inputs(sample_inputs), batch.actions)
+    inputs = batch.inputs(sample_inputs)
+    out = model(inputs, batch.actions)
     m = batch.mask
     nll = mdn_nll(out, batch.targets)[m].mean()
     ce = F.cross_entropy(out.event_logits[m], batch.events[m], weight=class_weights)
@@ -125,8 +134,29 @@ def batch_loss(
     mse = ((expected - batch.targets) ** 2)[m].mean()
     position = position_loss(out, batch) if out.position_logits is not None else torch.zeros(())
     obstacle = obstacle_loss(out, batch) if out.obstacle_logits is not None else torch.zeros(())
-    loss = nll + event_weight * ce + mse_weight * mse + position_weight * position + obstacle_weight * obstacle
-    return {"loss": loss, "nll": nll, "event_ce": ce, "mse": mse, "position_ce": position, "obstacle_bce": obstacle}
+    compass = compass_loss(model, out, inputs, batch) if model.compass_net is not None else torch.zeros(())
+    loss = (nll + event_weight * ce + mse_weight * mse + position_weight * position + obstacle_weight * obstacle
+            + compass_weight * compass)
+    return {"loss": loss, "nll": nll, "event_ce": ce, "mse": mse, "position_ce": position, "obstacle_bce": obstacle,
+            "compass": compass}
+
+
+def compass_loss(model: MDNRNN, out, inputs: torch.Tensor, batch: Batch) -> torch.Tensor:
+    """Kompasset for bilde t leses fra minnet før skrittet (h_{t-1}, nuller i første skritt) og z_t.
+
+    Kvadratfeil for målets plass sett fra agenten, pluss kryssentropi for om målet er sett. Plassen trenes
+    også før målet er sett: da lærer kompasset det beste gjettet ut fra hva som ikke synes (D77)."""
+    from worldmodels.mdnrnn.model import COMPASS_SCALE
+
+    ok = batch.mask & (batch.goal_known[:, :-1] >= 0)
+    if not ok.any():
+        return torch.zeros(())
+    h_before = torch.cat([torch.zeros_like(out.h[:, :1]), out.h[:, :-1]], dim=1)
+    pred = model.compass_logits(inputs, h_before)
+    target = batch.goal_ego[:, :-1] / COMPASS_SCALE
+    mse = ((pred[..., :2] - target) ** 2).sum(-1)[ok].mean()
+    bce = F.binary_cross_entropy_with_logits(pred[..., 2][ok], batch.goal_known[:, :-1][ok].float())
+    return mse + bce
 
 
 def obstacle_loss(out, batch: Batch) -> torch.Tensor:
@@ -150,17 +180,18 @@ def position_loss(out, batch: Batch) -> torch.Tensor:
 
 def run_epoch(
     model, seqs, indices, opt, batch_size, event_weight, rng=None, class_weights=None, mse_weight=0.0,
-    position_weight=0.0, obstacle_weight=0.0,
+    position_weight=0.0, obstacle_weight=0.0, compass_weight=0.0,
 ) -> dict[str, float]:
     training = opt is not None
     model.train(training)
     order = rng.permutation(indices) if training else indices
-    totals, n = {"loss": 0.0, "nll": 0.0, "event_ce": 0.0, "mse": 0.0, "position_ce": 0.0, "obstacle_bce": 0.0}, 0
+    totals, n = {"loss": 0.0, "nll": 0.0, "event_ce": 0.0, "mse": 0.0, "position_ce": 0.0, "obstacle_bce": 0.0,
+                 "compass": 0.0}, 0
     with torch.set_grad_enabled(training):
         for start in range(0, len(order), batch_size):
             batch = make_batch(seqs, order[start:start + batch_size])
             parts = batch_loss(model, batch, training, event_weight, class_weights, mse_weight, position_weight,
-                               obstacle_weight)
+                               obstacle_weight, compass_weight)
             if training:
                 opt.zero_grad()
                 parts["loss"].backward()
@@ -189,6 +220,7 @@ def train(
     position_weight: float = 0.0,
     obstacle_weight: float = 0.0,
     goal_oversample: int = 1,
+    compass_weight: float = 0.0,
     init_from: str | Path | None = None,
     seed: int = 0,
     log=lambda msg: print(msg, flush=True),
@@ -206,7 +238,8 @@ def train(
         log(f"Fortsetter fra {init_from}")
         # Nye hjelpehoder kan legges til en eksisterende modell; resten av vektene beholdes
         wanted = replace(model.config, position_head=model.config.position_head or position_weight > 0,
-                         obstacle_head=model.config.obstacle_head or obstacle_weight > 0)
+                         obstacle_head=model.config.obstacle_head or obstacle_weight > 0,
+                         compass=model.config.compass or compass_weight > 0)
         if wanted != model.config:
             old = model.state_dict()
             model = MDNRNN(wanted)
@@ -216,6 +249,7 @@ def train(
         model = MDNRNN(MDNRNNConfig(
             latent_dim=seqs.mu.shape[1], hidden_dim=hidden_dim, num_mixtures=num_mixtures, input_mlp=input_mlp,
             direct_path=direct_path, position_head=position_weight > 0, obstacle_head=obstacle_weight > 0,
+            compass=compass_weight > 0,
         ))
     class_weights = event_class_weights(seqs.subset(train_idx).events) if balance_events else None
     if class_weights is not None:
@@ -229,9 +263,9 @@ def train(
     for epoch in range(1, epochs + 1):
         t0 = time.time()
         tr = run_epoch(model, seqs, epoch_idx, opt, batch_size, event_weight, rng, class_weights, mse_weight,
-                       position_weight, obstacle_weight)
+                       position_weight, obstacle_weight, compass_weight)
         va = run_epoch(model, seqs, val_idx, None, batch_size, event_weight, None, class_weights, mse_weight,
-                       position_weight, obstacle_weight)
+                       position_weight, obstacle_weight, compass_weight)
         history.append({"epoch": epoch, "train": tr, "val": va})
         # Tidlig stopp på dynamikken alene. Hendelseshodet overtilpasser seg tidligere enn resten,
         # og ville ellers stoppet treningen før z-prediksjonen er ferdig lært.
@@ -242,7 +276,7 @@ def train(
         log(
             f"epoke {epoch:2d}  tren nll {tr['nll']:7.3f} hendelse {tr['event_ce']:.3f}  "
             f"mse {tr['mse']:.4f}  val nll {va['nll']:7.3f} hendelse {va['event_ce']:.3f} mse {va['mse']:.4f} "
-            f"posisjon {va['position_ce']:.3f} hindring {va['obstacle_bce']:.3f}  "
+            f"posisjon {va['position_ce']:.3f} hindring {va['obstacle_bce']:.3f} kompass {va['compass']:.3f}  "
             f"[{time.time() - t0:.0f}s]"
         )
 
@@ -250,7 +284,7 @@ def train(
         "hidden_dim": hidden_dim, "num_mixtures": num_mixtures, "epochs": epochs, "batch_size": batch_size,
         "lr": lr, "event_weight": event_weight, "balance_events": balance_events, "input_mlp": input_mlp,
         "direct_path": direct_path, "mse_weight": mse_weight, "position_weight": position_weight,
-        "obstacle_weight": obstacle_weight,
+        "obstacle_weight": obstacle_weight, "compass_weight": compass_weight,
         "goal_oversample": goal_oversample, "best_epoch": best_epoch,
         "seed": seed, "data": [str(d) for d in data] if isinstance(data, (list, tuple)) else str(data),
         "init_from": str(init_from) if init_from else None,
@@ -281,6 +315,8 @@ def main(argv: list[str] | None = None) -> None:
                    help="vekt på hjelpehodet som lærer minnet hvor agent og mål er (0 = av)")
     p.add_argument("--obstacle-weight", type=float, default=0.0,
                    help="vekt på hjelpehodet for hindringer i nabocellene (0 = av)")
+    p.add_argument("--compass-weight", type=float, default=0.0,
+                   help="vekt på kompasset som lærer hvor målet er sett fra agenten (førsteperson, 0 = av)")
     p.add_argument("--goal-oversample", type=int, default=1, help="vis mål-episoder så mange ganger per epoke")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args(argv)
@@ -290,7 +326,7 @@ def main(argv: list[str] | None = None) -> None:
         balance_events=not args.no_balance_events, input_mlp=not args.linear_input,
         direct_path=not args.no_direct_path, mse_weight=args.mse_weight, position_weight=args.position_weight,
         obstacle_weight=args.obstacle_weight,
-        goal_oversample=args.goal_oversample, init_from=args.init_from, seed=args.seed,
+        goal_oversample=args.goal_oversample, compass_weight=args.compass_weight, init_from=args.init_from, seed=args.seed,
     )
     print(json.dumps(result["history"][-1]))
 

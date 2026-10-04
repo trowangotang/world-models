@@ -22,7 +22,7 @@ def _log(msg: str) -> None:
     print(msg, flush=True)  # flush slik at fremdrift vises også når utdata går til fil
 
 
-def run_epoch(model, frames, opt, batch_size, object_weight, beta, rng=None) -> dict[str, float]:
+def run_epoch(model, frames, opt, batch_size, object_weight, beta, rng=None, colourful=False) -> dict[str, float]:
     """Én gjennomgang av frames. Trener hvis opt er gitt, ellers bare evaluerer."""
     training = opt is not None
     model.train(training)
@@ -31,7 +31,7 @@ def run_epoch(model, frames, opt, batch_size, object_weight, beta, rng=None) -> 
     with torch.set_grad_enabled(training):
         for x in iterate_minibatches(frames, batch_size, shuffle=training, rng=rng):
             recon, mu, logvar = model(x)
-            parts = vae_loss(recon, x, mu, logvar, object_weight=object_weight, beta=beta)
+            parts = vae_loss(recon, x, mu, logvar, object_weight=object_weight, beta=beta, colourful=colourful)
             if training:
                 opt.zero_grad()
                 parts["loss"].backward()
@@ -53,6 +53,8 @@ def train(
     beta: float = 1.0,
     seed: int = 0,
     frames_per_episode: int | None = None,
+    colourful: bool = False,
+    init_from: str | Path | None = None,
     log=_log,
 ) -> dict:
     torch.manual_seed(seed)
@@ -60,13 +62,18 @@ def train(
     split = load_split(data_dir, seed=seed, frames_per_episode=frames_per_episode)
     log(f"Trening: {len(split.train)} bilder, validering: {len(split.val)} bilder")
 
-    model = ConvVAE(VAEConfig(latent_dim=latent_dim))
+    if init_from:
+        # Samme arkitektur, så vektene fra en annen verden er et bedre utgangspunkt enn tilfeldige (D76)
+        model, _ = ConvVAE.load(init_from)
+        log(f"Fortsetter fra {init_from}")
+    else:
+        model = ConvVAE(VAEConfig(latent_dim=latent_dim))
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     history = []
     for epoch in range(1, epochs + 1):
         t0 = time.time()
-        tr = run_epoch(model, split.train, opt, batch_size, object_weight, beta, rng)
-        va = run_epoch(model, split.val, None, batch_size, object_weight, beta)
+        tr = run_epoch(model, split.train, opt, batch_size, object_weight, beta, rng, colourful)
+        va = run_epoch(model, split.val, None, batch_size, object_weight, beta, colourful=colourful)
         history.append({"epoch": epoch, "train": tr, "val": va})
         log(
             f"epoke {epoch:2d}  tren {tr['loss']:8.2f} (rek {tr['recon']:7.2f}, kl {tr['kl']:5.2f})  "
@@ -76,7 +83,8 @@ def train(
     hparams = {
         "latent_dim": latent_dim, "epochs": epochs, "batch_size": batch_size, "lr": lr,
         "object_weight": object_weight, "beta": beta, "seed": seed, "data_dir": str(data_dir),
-        "frames_per_episode": frames_per_episode,
+        "frames_per_episode": frames_per_episode, "colourful": colourful,
+        "init_from": str(init_from) if init_from else None,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     model.save(out, hparams=hparams, history=history)
@@ -96,11 +104,13 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--beta", type=float, default=1.0, help="vekt på KL-leddet")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--frames-per-episode", type=int, default=None, help="maks antall bilder per episode")
+    p.add_argument("--colourful", action="store_true", help="vekt bare fargerike piksler (førsteperson)")
+    p.add_argument("--init-from", default=None, help="start fra vektene i denne VAE-en")
     args = p.parse_args(argv)
     result = train(
         args.data, args.out, latent_dim=args.latent_dim, epochs=args.epochs, batch_size=args.batch_size,
         lr=args.lr, object_weight=args.object_weight, beta=args.beta, seed=args.seed,
-        frames_per_episode=args.frames_per_episode,
+        frames_per_episode=args.frames_per_episode, colourful=args.colourful, init_from=args.init_from,
     )
     print(json.dumps(result["history"][-1]))
 
