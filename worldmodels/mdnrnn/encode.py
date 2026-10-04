@@ -15,6 +15,8 @@ Filen inneholder episodene etter hverandre ("flatet ut"):
     danger         (sum(T_i + 1), 4)  krasj om agenten går den veien nå: hindring i nabocellen i dette
                                       bildet eller i neste (bevegelige hindringer, steg 10). I en stille
                                       verden er det det samme som near_obstacle.
+    obstacles      (sum(T_i + 1), 64) hindringskartet i bildet (1 = hindring), for hindringsøyet (steg 11).
+                                      Agenten dekker cellen den står i. -1 i eldre filer.
     actions        (sum(T_i),)
     events         (sum(T_i),)        EVENT_MOVE / EVENT_GOAL / EVENT_OBSTACLE
     lengths        (N,)               T_i, antall skritt i episode i
@@ -50,7 +52,7 @@ def episode_events(ep: Episode) -> np.ndarray:
     return events
 
 
-PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "near_obstacle", "danger", "actions", "events")
+PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "near_obstacle", "danger", "obstacles", "actions", "events")
 
 
 @dataclass
@@ -64,6 +66,7 @@ class ZSequences:
     goal_cell: np.ndarray
     near_obstacle: np.ndarray
     danger: np.ndarray
+    obstacles: np.ndarray
 
     def __len__(self) -> int:
         return len(self.lengths)
@@ -87,6 +90,7 @@ class ZSequences:
             "goal_cell": self.goal_cell[o:o + T + 1],
             "near_obstacle": self.near_obstacle[o:o + T + 1],
             "danger": self.danger[o:o + T + 1],
+            "obstacles": self.obstacles[o:o + T + 1],
             "actions": self.actions[s:s + T],
             "events": self.events[s:s + T],
         }
@@ -110,6 +114,8 @@ class ZSequences:
         fields.setdefault("near_obstacle", np.full((len(fields["agent_cell"]), len(ACTIONS)), -1, dtype=np.int8))
         # Filer fra den stille verdenen: hindringene flytter seg ikke, så faren er det som står ved siden av
         fields.setdefault("danger", fields["near_obstacle"].copy())
+        # Filer fra før steg 11 har ikke hindringskartene
+        fields.setdefault("obstacles", np.full((len(fields["agent_cell"]), 64), -1, dtype=np.int8))
         return cls(**fields)
 
     @classmethod
@@ -176,6 +182,7 @@ def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> Z
             danger[crash, ep.actions[crash]] = 1
         parts["near_obstacle"].append(near)
         parts["danger"].append(danger)
+        parts["obstacles"].append(maps.reshape(len(maps), -1).astype(np.int8))
         parts["actions"].append(ep.actions)
         parts["events"].append(episode_events(ep))
         lengths.append(len(ep))
