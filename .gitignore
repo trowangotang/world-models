@@ -4,5 +4,5 @@ __pycache__/
 *.egg-info/
 .venv/
 # Genererte data og modeller holdes utenfor git
-data/
-checkpoints/
+/data/
+/checkpoints/
