@@ -140,7 +140,7 @@ def dream_fitness(
     for _ in range(config.horizon):
         h = hidden[0][-1]
         extra, memory = world_features(model, z, hidden, controller.beliefs, controller.lookahead,
-                                       controller.sight, memory)
+                                       controller.sight, memory, track_goal=model.neighbours is not None)
         if eye_shaping:
             # Gevinsten for forrige skritt, nå som vi ser bildet det førte til. alive er sannsynligheten
             # for at det skrittet var en vanlig flytting; etter mål eller krasj betyr bildet ingenting.
@@ -155,7 +155,7 @@ def dream_fitness(
         action_counts += torch.bincount(a, minlength=controller.num_actions)
         out = model(z.unsqueeze(1), a.unsqueeze(1), hidden)
         hidden = out.hidden
-        p = F.softmax(out.event_logits[:, 0], dim=-1)
+        p = model.event_probs(out.event_logits[:, 0], z, memory, a)
         expected = (
             p[:, EVENT_MOVE] * config.reward_step
             + p[:, EVENT_GOAL] * config.reward_goal

@@ -24,17 +24,19 @@ def num_world_features(model: MDNRNN, beliefs: bool, lookahead: bool, sight: boo
 
 def world_features(
     model: MDNRNN, z: torch.Tensor, hidden: tuple[torch.Tensor, torch.Tensor], beliefs: bool, lookahead: bool,
-    sight: bool = False, goal_memory: torch.Tensor | None = None,
+    sight: bool = False, goal_memory: torch.Tensor | None = None, track_goal: bool = False,
 ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
     """z: (B, D), hidden: LSTM-tilstanden før skrittet -> ((B, antall) eller None, ny goal_memory).
 
-    goal_memory er øyets minne om målet (se MDNRNN.see). Uten syn sendes det uendret videre."""
+    goal_memory er øyets minne om målet (se MDNRNN.see). Det oppdateres med z når noe trenger det:
+    syn, fremsyn fra nærsynet, eller track_goal (drømmen, når den spår hendelser med nærsyn)."""
     parts = []
+    if sight or track_goal or (lookahead and model.neighbours is not None):
+        seen, goal_memory = model.see(z, goal_memory)
     if beliefs:
         parts.append(model.belief_features(hidden[0][-1]))
     if sight:
-        seen, goal_memory = model.see(z, goal_memory)
         parts.append(seen)
     if lookahead:
-        parts.append(model.lookahead_obstacle(z, hidden))
+        parts.append(model.lookahead_obstacle(z, hidden, goal_memory))
     return (torch.cat(parts, dim=-1) if parts else None), goal_memory
