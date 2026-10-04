@@ -51,7 +51,7 @@ def dream_vs_real(agent, seeds, start_step: int = 5, horizon: int = 10, config: 
         return {"starts": 0}
     z, _ = agent.vae.encode(to_tensor(obs[alive]))
     h, c = agent.hidden
-    memory = None if agent.goal_memory is None else agent.goal_memory[alive].clone()
+    memory = None if agent.memory is None else agent.memory.subset(alive).clone()
     starts = WarmStarts(z, h[:, alive].clone(), c[:, alive].clone(), alive, memory)
     ctrl = agent.controller
     d = dream_fitness(ctrl, ctrl.params[None], agent.rnn, starts, DreamConfig(horizon=horizon, temperature=0.0),

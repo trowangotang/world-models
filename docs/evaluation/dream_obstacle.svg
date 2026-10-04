@@ -85,13 +85,31 @@
 <circle cx="308.4" cy="126.7" r="2.3" fill="#e377c2" fill-opacity="0.7"/>
 <circle cx="348" cy="166" r="4" fill="#e377c2"/>
 <text x="358" y="170" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 6: syn</text>
-<polyline fill="none" stroke="#7f7f7f" stroke-width="1.5" points="64.6,291.2 105.0,274.6 160.6,291.6 213.5,269.4 267.8,235.0 311.9,274.0"/>
-<circle cx="64.6" cy="291.2" r="6.4" fill="#7f7f7f" fill-opacity="0.7"/>
-<circle cx="105.0" cy="274.6" r="4.1" fill="#7f7f7f" fill-opacity="0.7"/>
-<circle cx="160.6" cy="291.6" r="3.3" fill="#7f7f7f" fill-opacity="0.7"/>
-<circle cx="213.5" cy="269.4" r="2.7" fill="#7f7f7f" fill-opacity="0.7"/>
-<circle cx="267.8" cy="235.0" r="2.6" fill="#7f7f7f" fill-opacity="0.7"/>
-<circle cx="311.9" cy="274.0" r="2.5" fill="#7f7f7f" fill-opacity="0.7"/>
+<polyline fill="none" stroke="#7f7f7f" stroke-width="1.5" points="62.1,294.9 107.1,285.6 164.1,276.4 215.5,261.0 272.8,280.0 312.7,231.3"/>
+<circle cx="62.1" cy="294.9" r="6.6" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="107.1" cy="285.6" r="3.2" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="164.1" cy="276.4" r="2.8" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="215.5" cy="261.0" r="2.7" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="272.8" cy="280.0" r="2.8" fill="#7f7f7f" fill-opacity="0.7"/>
+<circle cx="312.7" cy="231.3" r="3.6" fill="#7f7f7f" fill-opacity="0.7"/>
 <circle cx="348" cy="186" r="4" fill="#7f7f7f"/>
 <text x="358" y="190" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 7: drømmen ser</text>
+<polyline fill="none" stroke="#17becf" stroke-width="1.5" points="61.8,295.5 102.7,292.4 157.0,269.4 209.5,72.5 265.1,72.5 312.4,83.3"/>
+<circle cx="61.8" cy="295.5" r="6.8" fill="#17becf" fill-opacity="0.7"/>
+<circle cx="102.7" cy="292.4" r="3.0" fill="#17becf" fill-opacity="0.7"/>
+<circle cx="157.0" cy="269.4" r="2.7" fill="#17becf" fill-opacity="0.7"/>
+<circle cx="209.5" cy="72.5" r="2.5" fill="#17becf" fill-opacity="0.7"/>
+<circle cx="265.1" cy="72.5" r="2.5" fill="#17becf" fill-opacity="0.7"/>
+<circle cx="312.4" cy="83.3" r="2.4" fill="#17becf" fill-opacity="0.7"/>
+<circle cx="348" cy="206" r="4" fill="#17becf"/>
+<text x="358" y="210" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 7 + sporing, håndlagt besøksvekt (diagnostikk)</text>
+<polyline fill="none" stroke="#1f77b4" stroke-width="1.5" points="61.8,297.0 106.3,278.3 163.8,256.7 222.8,213.3 262.5,196.0 314.8,40.0"/>
+<circle cx="61.8" cy="297.0" r="6.9" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="106.3" cy="278.3" r="3.0" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="163.8" cy="256.7" r="2.6" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="222.8" cy="213.3" r="2.4" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="262.5" cy="196.0" r="2.4" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="314.8" cy="40.0" r="2.4" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="348" cy="226" r="4" fill="#1f77b4"/>
+<text x="358" y="230" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 8: sporing</text>
 </svg>

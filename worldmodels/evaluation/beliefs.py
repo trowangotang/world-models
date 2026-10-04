@@ -11,6 +11,7 @@ import numpy as np
 import torch
 
 from worldmodels.env import GridConfig, GridDodgeEnv
+from worldmodels.mdnrnn.tracker import observe
 from worldmodels.vae.dataset import to_tensor
 
 REPORT_STEPS = (0, 1, 2, 5, 10)
@@ -20,7 +21,8 @@ REPORT_STEPS = (0, 1, 2, 5, 10)
 def belief_accuracy(agent, seeds, config: GridConfig | None = None) -> dict | None:
     """Andel skritt der troen peker på riktig celle, og snittfeil i celler, per skritt.
 
-    Med øye (steg 6) måles det controlleren faktisk bruker: det øyet ser i bildet akkurat nå."""
+    Med øye (steg 6) måles det controlleren faktisk bruker: det øyet ser i bildet akkurat nå,
+    eller med sporing (steg 8) det filtrerte."""
     rnn = agent.rnn
     use_eye = getattr(agent.controller, "sight", False)
     if rnn.num_position_features == 0 and not use_eye:
@@ -36,7 +38,8 @@ def belief_accuracy(agent, seeds, config: GridConfig | None = None) -> dict | No
     while active.any():
         if use_eye:
             z, _ = agent.vae.encode(to_tensor(obs))
-            f = rnn.see(z, agent.goal_memory)[0].numpy()  # det controlleren får i dette skrittet
+            seen, tracked, _ = observe(rnn, z, agent.memory)  # det controlleren får i dette skrittet
+            f = (tracked if agent.controller.track else seen).numpy()
         else:
             f = rnn.position_features(agent.hidden[0][-1]).numpy()
         cells = np.rint((f + 1) / 2 * (side - 1)).astype(int)
@@ -57,6 +60,7 @@ def belief_accuracy(agent, seeds, config: GridConfig | None = None) -> dict | No
         return {"n": int(len(err_a)), "agent_exact": float((err_a == 0).mean()), "agent_error": float(err_a.mean()),
                 "goal_exact": float((err_g == 0).mean()), "goal_error": float(err_g.mean())}
 
-    out = {"source": "eye" if use_eye else "memory", "by_step": {t: row(*per_step[t]) for t in REPORT_STEPS if t < len(per_step)}}
+    source = ("tracked eye" if agent.controller.track else "eye") if use_eye else "memory"
+    out = {"source": source, "by_step": {t: row(*per_step[t]) for t in REPORT_STEPS if t < len(per_step)}}
     out["all"] = row(np.concatenate([a for a, _ in per_step]), np.concatenate([g for _, g in per_step]))
     return out

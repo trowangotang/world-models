@@ -24,12 +24,12 @@ class WorldModelAgent:
     def __init__(self, vae: ConvVAE, rnn: MDNRNN, controller: LinearController):
         self.vae, self.rnn, self.controller = vae.eval(), rnn.eval(), controller
         self.hidden = None
-        self.goal_memory = None
+        self.memory = None   # øyets hukommelse (mdnrnn/tracker.py)
 
     def reset(self, batch_size: int) -> None:
         H = self.rnn.config.hidden_dim
         self.hidden = (torch.zeros(1, batch_size, H), torch.zeros(1, batch_size, H))
-        self.goal_memory = None
+        self.memory = None
 
     @torch.no_grad()
     def act(self, obs: np.ndarray, epsilon: float = 0.0, rng: np.random.Generator | None = None) -> np.ndarray:
@@ -42,8 +42,8 @@ class WorldModelAgent:
         c = self.controller
         extra = None
         if c.extra_dim:
-            extra, self.goal_memory = world_features(self.rnn, z, self.hidden, c.beliefs, c.lookahead, c.sight,
-                                                     self.goal_memory)
+            extra, self.memory = world_features(self.rnn, z, self.hidden, c.beliefs, c.lookahead, c.sight,
+                                                self.memory, track=c.track)
         a = self.controller.act(z, h, extra)
         if epsilon > 0:
             rng = rng if rng is not None else np.random.default_rng()
@@ -51,6 +51,8 @@ class WorldModelAgent:
             random_actions = rng.integers(self.rnn.config.num_actions, size=len(a))
             a = torch.from_numpy(np.where(explore, random_actions, a.numpy()))
         self.hidden = self.rnn(z.unsqueeze(1), a.unsqueeze(1), self.hidden).hidden
+        if self.memory is not None:
+            self.memory = self.memory.moved(a)
         return a.numpy()
 
 

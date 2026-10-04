@@ -31,6 +31,7 @@ from worldmodels.controller.policy import LinearController
 from worldmodels.env import GridConfig
 from worldmodels.mdnrnn.encode import EVENT_GOAL, EVENT_MOVE, EVENT_OBSTACLE, ZSequences
 from worldmodels.mdnrnn.model import MDNRNN, most_likely_mean, sample_next
+from worldmodels.mdnrnn.tracker import EyeMemory, observe
 from worldmodels.mdnrnn.train import make_batch
 
 
@@ -41,7 +42,7 @@ class WarmStarts:
     h: torch.Tensor        # (1, N, H) LSTM-tilstand
     c: torch.Tensor        # (1, N, H)
     episodes: np.ndarray   # (N,) hvilke episoder startene kom fra
-    goal_memory: torch.Tensor | None = None  # (N, celler) øyets minne om målet fra oppvarmingen
+    memory: EyeMemory | None = None  # øyets hukommelse fra oppvarmingen (mål, agent, besøk)
 
     def __len__(self) -> int:
         return len(self.episodes)
@@ -51,7 +52,7 @@ class WarmStarts:
         return self.subset(idx)
 
     def subset(self, idx) -> "WarmStarts":
-        memory = None if self.goal_memory is None else self.goal_memory[idx]
+        memory = None if self.memory is None else self.memory.subset(idx)
         return WarmStarts(self.z[idx], self.h[:, idx], self.c[:, idx], self.episodes[idx], memory)
 
 
@@ -68,12 +69,14 @@ def make_warm_starts(model: MDNRNN, seqs: ZSequences, indices, context: int = 5,
         hs.append(out.hidden[0])
         cs.append(out.hidden[1])
         if model.eye is not None:
-            # Øyet har sett de ekte oppvarmingsbildene og husker hvor målet var (D49).
+            # Øyet har sett de ekte oppvarmingsbildene: det husker hvor målet var (D49), hvor
+            # agenten står og hvor den har vært (D56, D57).
             memory = None
             for t in range(context):
-                _, memory = model.see(b.z_mu[:, t], memory)
+                _, _, memory = observe(model, b.z_mu[:, t], memory)
+                memory = memory.moved(b.actions[:, t])
             ms.append(memory)
-    memory = torch.cat(ms) if ms else None
+    memory = None if not ms else EyeMemory(*(torch.cat([getattr(m, f) for m in ms]) for f in ("goal", "agent", "visits")))
     return WarmStarts(torch.cat(zs), torch.cat(hs, dim=1), torch.cat(cs, dim=1), keep, memory)
 
 
@@ -134,13 +137,14 @@ def dream_fitness(
     eye_shaping = config.shaping > 0 and controller.sight
     use_shaping = config.shaping > 0 and (eye_shaping or model.num_position_features > 0)
     shaped = torch.zeros(P * B)
-    memory = None if starts.goal_memory is None else starts.goal_memory.repeat(P, 1)
+    memory = None if starts.memory is None else starts.memory.repeat(P)
     seen_at = model.num_belief_features if controller.beliefs else 0   # hvor synet står i extra
     prev_distance = None
     for _ in range(config.horizon):
         h = hidden[0][-1]
         extra, memory = world_features(model, z, hidden, controller.beliefs, controller.lookahead,
-                                       controller.sight, memory, track_goal=model.neighbours is not None)
+                                       controller.sight, memory, track_goal=model.neighbours is not None,
+                                       track=controller.track)
         if eye_shaping:
             # Gevinsten for forrige skritt, nå som vi ser bildet det førte til. alive er sannsynligheten
             # for at det skrittet var en vanlig flytting; etter mål eller krasj betyr bildet ingenting.
@@ -155,7 +159,10 @@ def dream_fitness(
         action_counts += torch.bincount(a, minlength=controller.num_actions)
         out = model(z.unsqueeze(1), a.unsqueeze(1), hidden)
         hidden = out.hidden
-        p = model.event_probs(out.event_logits[:, 0], z, memory, a)
+        p = model.event_probs(out.event_logits[:, 0], z, None if memory is None else memory.goal, a,
+                              None if memory is None else memory.agent)
+        if memory is not None:
+            memory = memory.moved(a)
         expected = (
             p[:, EVENT_MOVE] * config.reward_step
             + p[:, EVENT_GOAL] * config.reward_goal
@@ -171,7 +178,8 @@ def dream_fitness(
         nxt = sample_next(out, config.temperature, generator) if config.temperature > 0 else most_likely_mean(out)
         z = nxt[:, 0]
     if eye_shaping:
-        seen, _ = model.see(z, memory)
+        seen, tracked, _ = observe(model, z, memory)
+        seen = tracked if controller.track else seen
         shaped += alive * config.shaping * (prev_distance - position_distance(model, seen))
     total += alive * config.remaining_steps * config.reward_step
     fitness = (total + shaped).view(P, B).mean(1).numpy()

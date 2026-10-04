@@ -45,6 +45,8 @@ AGENTS = (
     ("Håndlaget på øyet (diagnostikk)", "mdnrnn_eye.pt", "controller_eye_handcrafted.npz", True),
     ("Steg 6: syn", "mdnrnn_eye.pt", "controller_eye_look.npz", False),
     ("Steg 7: drømmen ser", "mdnrnn_sense.pt", "controller_sense.npz", False),
+    ("Steg 7 + sporing, håndlagt besøksvekt (diagnostikk)", "mdnrnn_sense.pt", "controller_track_handcrafted.npz", True),
+    ("Steg 8: sporing", "mdnrnn_sense.pt", "controller_track.npz", False),
 )
 
 
@@ -171,17 +173,21 @@ def make_figures(out: Path, policies, agents, records, summaries, dream) -> dict
     files["final_strips"] = "final_strips.png"
     files["chosen"] = chosen
 
-    # Samme brett, to agenter: der 4d krasjet og sluttagenten kom frem.
+    # Samme brett, to agenter: der forrige agent feilet og sluttagenten kom frem. Vi viser den
+    # feilen sluttagenten oftest retter (krasj, eller avkortet som oftest betyr pendling).
     if len(learned) >= 2:
         prev = learned[-2]
         prev_by = {r.seed: r for r in records[prev.name]}
-        flips = [s for s, r in by_seed.items() if r.outcome == "goal" and prev_by[s].outcome == "obstacle"][:4]
+        fixed = {o: [s for s, r in by_seed.items() if r.outcome == "goal" and prev_by[s].outcome == o]
+                 for o in ("obstacle", "truncated")}
+        failure = max(fixed, key=lambda o: len(fixed[o]))
+        flips = fixed[failure][:4]
         if flips:
             imgs = [figures.path_overlay(first_frame(s), prev_by[s].path) for s in flips]
             imgs += [figures.path_overlay(first_frame(s), by_seed[s].path) for s in flips]
             save_png(figures.tile(imgs, columns=len(flips)), out / "compare_paths.png")
             files["compare_paths"] = "compare_paths.png"
-            files["compare"] = {"a": prev.name, "b": final.name, "seeds": flips}
+            files["compare"] = {"a": prev.name, "b": final.name, "seeds": flips, "failure": failure}
     return files
 
 

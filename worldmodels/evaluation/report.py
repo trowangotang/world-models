@@ -21,6 +21,9 @@ def signed_pp(x: float) -> str:
     return ("+" if x >= 0 else "−") + f"{abs(x) * 100:.1f}".replace(".", ",")
 
 
+FAILURE_TEXT = {"obstacle": "krasjet", "truncated": "ble avkortet"}
+
+
 def write_report(path: Path, results: dict, figures: dict) -> None:
     S = results["summaries"]
     cheat = {p["name"]: p["cheat"] for p in results["policies"]}
@@ -93,7 +96,7 @@ def write_report(path: Path, results: dict, figures: dict) -> None:
               "| Agent | Kilde | Skritt | Agent riktig | Agent feil (celler) | Mål riktig | Mål feil (celler) | Episoder |",
               "|---|---|---|---:|---:|---:|---:|---:|"]
         for name, b in results["beliefs"].items():
-            source = {"eye": "øye", "memory": "minne"}[b.get("source", "memory")]
+            source = {"eye": "øye", "tracked eye": "øye + sporing", "memory": "minne"}[b.get("source", "memory")]
             for t, r in [*b["by_step"].items(), ("alle", b["all"])]:
                 L.append(f"| {name} | {source} | {t} | {pct(r['agent_exact'], 0)} | {num(r['agent_error'], 1)} | "
                          f"{pct(r['goal_exact'], 0)} | {num(r['goal_error'], 1)} | {r['n']} |")
@@ -126,6 +129,7 @@ def write_report(path: Path, results: dict, figures: dict) -> None:
     if "compare_paths" in figures:
         c = figures["compare"]
         L += ["## Samme brett, to agenter", "",
-              f"Brett der {c['a']} (øverst) krasjet og {c['b']} (nederst) kom frem.", "",
+              f"Brett der {c['a']} (øverst) {FAILURE_TEXT[c.get('failure', 'obstacle')]} og {c['b']} (nederst) "
+              "kom frem.", "",
               f"![Sammenligning]({figures['compare_paths']})", ""]
     path.write_text("\n".join(L))
