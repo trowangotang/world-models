@@ -911,3 +911,22 @@ Martin valgte "Oppdater drømmesiden" som neste steg.
   flyttet seg inn i, spådde M 173 (79 %), og 173 av de 182 cellene den spådde var riktige (95 %).
   Dette er et lite utvalg, så bare en pekepinn.
 - Filen er 1,3 MB (0,7 før), fordi hvert skritt nå har to kart til.
+
+## Steg 13: porteføljeside
+
+Martin valgte "Porteføljeside" som neste steg: en kort README-forside og en oversiktsside, uten trening.
+
+### D74. Én oversiktsside for reisen, README som forside, detaljene i docs/steg.md
+- **`docs/index.html`** er en selvstendig side som forteller hele reisen: hva V, M og C er, en figur over
+  målraten per steg (stille og bevegelige hindringer, med tilfeldig og juks som referanselinjer), og ett
+  kort per steg med problemet, hva vi gjorde, resultatet og et bilde. Stegene er gruppert i fire
+  faser: bygge delene, drømmen blir lurt, drømmen lærer å se, og verden begynner å bevege seg.
+- **Figuren viser også stegene som gikk dårlig** (4–4c og steg 6). De er en del av historien: det lange
+  stykket rundt 10 % er der controlleren lærte å lure drømmen, og det forklarer hvorfor resten av
+  prosjektet handler om å gjøre drømmen ærlig.
+- **Tallene er skrevet inn for hånd** fra `docs/evaluation*/results.json`. Siden skal ikke endres ofte, og
+  en generator ville vært mer kode enn siden selv. Bildene lenkes relativt, så siden virker når den
+  åpnes fra `docs/`.
+- **README er nå en forside** på rundt 100 linjer: hva prosjektet er, sluttresultatet, lenker til de to
+  sidene, arkitekturen og statustabellen. Alle kommandoene og resultatene per steg er flyttet uendret til
+  `docs/steg.md`, med lenkene rettet.
