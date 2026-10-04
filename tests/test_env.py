@@ -147,3 +147,63 @@ def test_parse_cells_accepts_float_batches_and_reports_missing():
     idx = find_cell(cells, AGENT)
     assert idx[0] == env.agent_pos[0] * 8 + env.agent_pos[1]
     assert idx[1] == -1
+
+
+def moving_env(agent, goal, movers, static=()):
+    """Et lite brett satt opp for hånd: movers er [(posisjon, retning)]."""
+    env = GridDodgeEnv(GridConfig(moving_obstacles=len(movers), num_obstacles=len(movers) + len(static)))
+    env.reset(seed=0)
+    env.agent_pos, env.goal_pos = agent, goal
+    env.movers = list(movers)
+    env.obstacles = frozenset([p for p, _ in movers] + list(static))
+    return env
+
+
+def test_static_world_is_unchanged_by_default():
+    env = GridDodgeEnv()
+    env.reset(seed=1)
+    before = env.obstacles
+    for _ in range(5):
+        if env._done:
+            break
+        env.step(0)
+    assert env.obstacles == before and env.movers == []
+
+
+def test_moving_obstacle_bounces_off_the_wall():
+    env = moving_env(agent=(7, 7), goal=(7, 0), movers=[((0, 6), (0, 1))])
+    path = []
+    for _ in range(3):
+        env.step(0)
+        path.append(env.movers[0][0])
+    assert path == [(0, 7), (0, 6), (0, 5)]   # inn til kanten, snur, går tilbake
+
+
+def test_obstacle_moving_into_the_agent_ends_the_episode():
+    env = moving_env(agent=(3, 3), goal=(7, 7), movers=[((3, 5), (0, -1))])
+    _, reward, terminated, _, info = env.step(3)   # agenten går til (3, 4), hindringen kommer fra (3, 5)
+    assert terminated and info["event"] == "obstacle" and reward == env.config.reward_obstacle
+
+
+def test_next_obstacles_predicts_the_step_and_danger_covers_both():
+    env = moving_env(agent=(6, 0), goal=(0, 0), movers=[((2, 2), (1, 0)), ((5, 5), (0, -1))], static=[(4, 4)])
+    predicted = env.next_obstacles()
+    assert env.danger() == env.obstacles | predicted
+    env.step(0)
+    assert env.obstacles == predicted == {(3, 2), (5, 4), (4, 4)}
+
+
+def test_moving_world_is_deterministic_for_same_seed():
+    cfg = GridConfig(moving_obstacles=3)
+    runs = []
+    for _ in range(2):
+        env = GridDodgeEnv(cfg)
+        env.reset(seed=7)
+        seen = []
+        for _ in range(6):
+            if env._done:
+                break
+            env.step(1)
+            seen.append(env.obstacles)
+        runs.append(seen)
+    assert runs[0] == runs[1]

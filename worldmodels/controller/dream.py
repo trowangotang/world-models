@@ -55,11 +55,26 @@ class WarmStarts:
         memory = None if self.memory is None else self.memory.subset(idx)
         return WarmStarts(self.z[idx], self.h[:, idx], self.c[:, idx], self.episodes[idx], memory)
 
+    @classmethod
+    def concat(cls, parts: list["WarmStarts"]) -> "WarmStarts":
+        memory = None if parts[0].memory is None else EyeMemory.concat([p.memory for p in parts])
+        return cls(torch.cat([p.z for p in parts]), torch.cat([p.h for p in parts], dim=1),
+                   torch.cat([p.c for p in parts], dim=1), np.concatenate([p.episodes for p in parts]), memory)
+
 
 @torch.no_grad()
 def make_warm_starts(model: MDNRNN, seqs: ZSequences, indices, context: int = 5, batch_size: int = 1024) -> WarmStarts:
-    """Kjør RNN-en over de første `context` ekte skrittene av hver episode som varer så lenge."""
+    """Kjør RNN-en over de første `context` ekte skrittene av hver episode som varer så lenge.
+
+    context=0 starter drømmen i episodens første bilde, med tomt minne, slik agenten selv starter.
+    Det trengs når hindringene beveger seg: der er de første skrittene de farligste (D67)."""
     model.eval()
+    if context == 0:
+        keep = np.asarray(list(indices))
+        z = torch.from_numpy(seqs.mu[seqs.obs_offsets[keep]]).float()
+        zeros = torch.zeros(1, len(keep), model.config.hidden_dim)
+        memory = None if model.eye is None else EyeMemory.fresh(len(keep), model.config.grid_cells)
+        return WarmStarts(z, zeros, zeros.clone(), keep, memory)
     keep = np.array([i for i in indices if seqs.lengths[i] > context])
     zs, hs, cs, ms = [], [], [], []
     for start in range(0, len(keep), batch_size):
@@ -76,7 +91,7 @@ def make_warm_starts(model: MDNRNN, seqs: ZSequences, indices, context: int = 5,
                 _, _, memory = observe(model, b.z_mu[:, t], memory)
                 memory = memory.moved(b.actions[:, t])
             ms.append(memory)
-    memory = None if not ms else EyeMemory(*(torch.cat([getattr(m, f) for m in ms]) for f in ("goal", "agent", "visits")))
+    memory = None if not ms else EyeMemory.concat(ms)
     return WarmStarts(torch.cat(zs), torch.cat(hs, dim=1), torch.cat(cs, dim=1), keep, memory)
 
 
@@ -160,7 +175,7 @@ def dream_fitness(
         out = model(z.unsqueeze(1), a.unsqueeze(1), hidden)
         hidden = out.hidden
         p = model.event_probs(out.event_logits[:, 0], z, None if memory is None else memory.goal, a,
-                              None if memory is None else memory.agent)
+                              None if memory is None else memory.agent, h)
         if memory is not None:
             memory = memory.moved(a)
         expected = (

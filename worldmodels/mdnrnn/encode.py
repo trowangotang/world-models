@@ -12,6 +12,9 @@ Filen inneholder episodene etter hverandre ("flatet ut"):
     goal_cell      (sum(T_i + 1),)    målets celle (fast gjennom episoden, -1 i eldre filer)
     near_obstacle  (sum(T_i + 1), 4)  hindring i nabocellen over/under/venstre/høyre for agenten
                                       (1 = ja, 0 = nei eller kant, -1 = ukjent/eldre filer)
+    danger         (sum(T_i + 1), 4)  krasj om agenten går den veien nå: hindring i nabocellen i dette
+                                      bildet eller i neste (bevegelige hindringer, steg 10). I en stille
+                                      verden er det det samme som near_obstacle.
     actions        (sum(T_i),)
     events         (sum(T_i),)        EVENT_MOVE / EVENT_GOAL / EVENT_OBSTACLE
     lengths        (N,)               T_i, antall skritt i episode i
@@ -47,7 +50,7 @@ def episode_events(ep: Episode) -> np.ndarray:
     return events
 
 
-PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "near_obstacle", "actions", "events")
+PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "near_obstacle", "danger", "actions", "events")
 
 
 @dataclass
@@ -60,6 +63,7 @@ class ZSequences:
     lengths: np.ndarray
     goal_cell: np.ndarray
     near_obstacle: np.ndarray
+    danger: np.ndarray
 
     def __len__(self) -> int:
         return len(self.lengths)
@@ -82,6 +86,7 @@ class ZSequences:
             "agent_cell": self.agent_cell[o:o + T + 1],
             "goal_cell": self.goal_cell[o:o + T + 1],
             "near_obstacle": self.near_obstacle[o:o + T + 1],
+            "danger": self.danger[o:o + T + 1],
             "actions": self.actions[s:s + T],
             "events": self.events[s:s + T],
         }
@@ -103,6 +108,8 @@ class ZSequences:
         # Filer kodet før målets celle ble lagret: ukjent overalt
         fields.setdefault("goal_cell", np.full(len(fields["agent_cell"]), -1, dtype=np.int64))
         fields.setdefault("near_obstacle", np.full((len(fields["agent_cell"]), len(ACTIONS)), -1, dtype=np.int8))
+        # Filer fra den stille verdenen: hindringene flytter seg ikke, så faren er det som står ved siden av
+        fields.setdefault("danger", fields["near_obstacle"].copy())
         return cls(**fields)
 
     @classmethod
@@ -153,8 +160,22 @@ def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> Z
         parts["agent_cell"].append(find_cell(cells, AGENT))
         # Målet flytter seg aldri, men skjules når agenten står på det. Bruk første bilde.
         parts["goal_cell"].append(np.full(len(ep.obs), find_cell(cells[:1], GOAL)[0], dtype=np.int64))
-        # Hindringene flytter seg heller ikke; første bilde viser alle.
-        parts["near_obstacle"].append(near_obstacles(cells[0] == OBSTACLE, parts["agent_cell"][-1]))
+        # Hindringene leses fra hvert bilde, siden noen kan bevege seg (steg 10). Agenten tegnes oppå
+        # det den står på, så i en stille verden er første bilde tryggest: der står ingen oppå noe.
+        agent = parts["agent_cell"][-1]
+        maps = cells == OBSTACLE
+        if (maps == maps[:1]).all() or len(maps) == 1:
+            near = near_obstacles(maps[0], agent)
+            danger = near
+        else:
+            near = np.stack([near_obstacles(maps[t], agent[t:t + 1])[0] for t in range(len(maps))])
+            after = np.stack([near_obstacles(maps[min(t + 1, len(maps) - 1)], agent[t:t + 1])[0] for t in range(len(maps))])
+            danger = np.where((near < 0) | (after < 0), -1, near | after).astype(np.int8)
+            # Krasjer agenten, står den oppå hindringen i neste bilde og skjuler den. Hendelsen sier fra.
+            crash = np.flatnonzero(episode_events(ep) == EVENT_OBSTACLE)
+            danger[crash, ep.actions[crash]] = 1
+        parts["near_obstacle"].append(near)
+        parts["danger"].append(danger)
         parts["actions"].append(ep.actions)
         parts["events"].append(episode_events(ep))
         lengths.append(len(ep))

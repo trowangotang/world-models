@@ -318,3 +318,36 @@ def test_eye_is_saved_with_the_model(tmp_path):
     z = torch.randn(3, 4)
     assert torch.allclose(loaded.seen_positions(z), m.eval().seen_positions(z))
     assert MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8)).eye is None
+
+
+def test_danger_equals_near_obstacle_in_a_still_world(seqs):
+    assert np.array_equal(seqs.danger, seqs.near_obstacle)
+
+
+def test_danger_label_with_moving_obstacles(tmp_path):
+    from worldmodels.env import GridConfig
+
+    collect_rollouts(tmp_path, num_episodes=8, seed=0, config=GridConfig(moving_obstacles=3))
+    torch.manual_seed(0)
+    moving = encode_episodes(ConvVAE(VAEConfig(latent_dim=4)), episode_paths(tmp_path))
+    known = (moving.danger >= 0) & (moving.near_obstacle >= 0)
+    # Faren er det som står ved siden av nå, pluss det som flytter seg dit
+    assert (moving.danger[known] >= moving.near_obstacle[known]).all()
+    assert (moving.danger[known] > moving.near_obstacle[known]).any()
+    for i in range(len(moving)):
+        e = moving.episode(i)
+        for t in np.flatnonzero(e["events"] == EVENT_OBSTACLE):
+            assert e["danger"][t, e["actions"][t]] == 1
+
+
+def test_neighbour_eye_with_memory_needs_and_uses_context():
+    from worldmodels.mdnrnn.neighbours import NeighbourEye
+
+    torch.manual_seed(0)
+    eye = NeighbourEye(latent_dim=4, channels=4, context_dim=6)
+    z, goal, agent = torch.randn(3, 4), torch.full((3, 64), 1 / 64), torch.full((3, 64), 1 / 64)
+    with pytest.raises(ValueError):
+        eye(z, goal, agent)
+    a, b = eye(z, goal, agent, torch.zeros(3, 6)), eye(z, goal, agent, torch.randn(3, 6))
+    assert a.shape == (3, 2, 4)
+    assert not torch.allclose(a, b)

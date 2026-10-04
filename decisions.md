@@ -735,3 +735,99 @@ Over alle 65 drømmene på de 11 brettene (et lite og ikke tilfeldig utvalg, så
   agenten (7 %).
 - Øyet alene så agenten i feil celle i 3 av 65 ekte skritt, alle på omveiene. Filteret fra steg 8
   var riktig i alle 65. Med valget "Øyet alene" kan man se de tre tilfellene.
+
+## Steg 10: bevegelige hindringer
+
+Martin: "kjør bevegelige hindringer nå".
+
+### D64. Tre av seks hindringer går fram og tilbake
+**Valg:** `GridConfig(moving_obstacles=3)`. Hver bevegelig hindring får en fast retning (opp, ned,
+venstre eller høyre) og flytter seg én celle hvert skritt, etter agenten. Møter den kanten, en annen
+hindring eller målet, snur den. Er det stengt begge veier, står den stille. Går agenten inn i en
+hindring, eller en hindring inn i agenten, er det krasj.
+
+**Hvorfor:**
+- *Fortsatt deterministisk* (D3): neste bilde er gitt av de to siste, så M kan lære det. Det er ingen
+  ny tilfeldighet å skjule feil bak.
+- *Bevegelsen syns ikke i ett bilde.* Hindringene har samme farge enten de står eller går. For å vite
+  hvor de er på vei, må agenten huske. Det er nettopp det minnet i M er til for, og det steg 1–9
+  aldri trengte.
+- *Stille brett er uendret:* retningene trekkes bare når `moving_obstacles > 0`, etter at brettet er
+  lagt ut, så alle gamle seeds gir de samme brettene.
+- *Hvorfor tre:* med to beveger steg 8-agenten seg forbi i 84 %, med fire i 75 %. Tre (81 %) er
+  vanskelig nok til at det merkes, men ikke så vanskelig at alt drukner i krasj.
+
+Miljøet har også `danger()`: cellene agenten krasjer i om den går dit nå (der hindringene står og der
+de er om ett skritt). Juks-grunnlinjene bruker den, så de fortsatt viser hva som er mulig (99 % mål).
+
+### D65. Ny data og M som finjusteres, ikke trenes fra null
+- **Data:** 20 000 tilfeldige episoder (de dør etter 11 skritt i snitt) og 10 000 med steg 8-agenten
+  og 30 % tilfeldige handlinger (62 % mål). Agentepisodene er lengre, så M ser hindringene bevege
+  seg over mange bilder.
+- **Fare-merkelapp:** `encode` merker nå "krasj om agenten går denne veien" for hvert bilde, fra dette
+  og neste bilde. Der agenten krasjer og dekker hindringen, sier hendelsen fra. Merkelappen stemmer
+  med miljøets egen `danger()` i 99 % av tilfellene. I en stille verden er den lik den gamle.
+- **M:** startet fra steg 7/8-modellen og trent videre i 30 epoker på den nye dataen. Målt på hvor
+  hindringene står i neste drømte bilde (`motion_check.py`) finner den 16 % av cellene en hindring
+  flytter seg inn i, mot 1 % for den gamle M. Den blir altså litt bedre, men tegner fortsatt helst
+  hindringene der de sto.
+
+### D66. Nærsynet får M sitt minne
+Nærsynet (steg 7) spår mål og hindring i hver nabocelle fra ett bilde. Det kan ikke se hvor en
+hindring er på vei. Nå får det også M sitt minne h fra før skrittet (`NeighbourEye(context_dim=H)`,
+`--memory`), og lærer å spå "fare" i stedet for "hindring" (D65).
+
+| Nærsynet (valideringsbilder) | Står der nå | På vei inn | Falsk alarm |
+|---|---:|---:|---:|
+| Uten minne | 91,8 % | 4,5 % | 0,7 % |
+| **Med minne** | **91,2 %** | **27,7 %** | 1,4 % |
+
+Uten minne ser det nesten aldri det som kommer. Med minne ser det mer enn hver fjerde. Resten av
+kjeden er uendret: sporing (steg 8), fremsyn og drømmen bruker nærsynet som før.
+
+### D67. Hvor krasjene skjer, og to idéer som ikke hjalp
+`crash_check.py` deler krasjene i verdenen med bevegelige hindringer (1000 brett) i to: gikk agenten
+inn i en hindring som sto der, eller flyttet en hindring seg inn der agenten havnet?
+
+| | Mål | Sto der | På vei inn | Av dem i første skritt |
+|---|---:|---:|---:|---:|
+| Steg 8 | 79,1 % | 72 | 137 | 65 |
+| Steg 10 | 82,9 % | 53 | 118 | 51 |
+
+To av tre krasj er hindringer på vei inn, og en tredel av alle skjer i første skritt, der ingen kan
+vite hvor hindringene skal. To forsøk på å ta mer av dem:
+
+- **Drømmer som starter i første skritt** (`--context 0 5`). Drømmen startet alltid etter fem ekte
+  skritt, så controlleren øvde aldri på starten. Resultat: 82,2 %, ikke bedre. Starten er vanskelig
+  fordi ingen ser bevegelsen ennå, ikke fordi controlleren mangler øvelse. Støtten for `--context 0`
+  er beholdt (med test), men brukes ikke.
+- **Nærsynet får forrige bilde i tillegg til h** (`motion_eye.py`). Det ser flere hindringer på vei
+  inn (37 % mot 28 %), men færre av dem som står der (88 % mot 91 %). Ikke verdt å bygge inn i hele
+  kjeden.
+
+### D68. Resultat: 83 % mål mot 79 % for steg 8
+2000 nye brett (seeds 200000–201999) med tre bevegelige hindringer, `docs/evaluation_moving/report.md`:
+
+| | Mål | Krasj | Avkastning |
+|---|---:|---:|---:|
+| Steg 8, uendret | 78,5 % | 21,6 % | +0,53 |
+| **Steg 10** | **83,0 % (81–85)** | **17,0 % (15–19)** | **+0,62** |
+| Juks: mot målet, unngår faren | 98,7 % | 0,1 % | +0,93 |
+
+- Parvis mot steg 8: +4,6 poeng mål (+3,2 til +6,0). 152 brett bare steg 10 klarte, 60 bare steg 8.
+- Gevinsten er størst på lange avstander: 68 % mot 59 % ved 8+ skritt til målet.
+- **Drømmen er ærlig igjen.** Steg 8 sin drøm lover 2,8 % krasj innen 10 skritt i denne verdenen, og
+  9,3 % skjer, fordi den ikke vet at hindringer flytter seg. Steg 10 sin drøm lover 6,9 %, og 6,5 %
+  skjer.
+
+### D69. Det som gjenstår, og mindre trening framover
+- **Hindringer på vei inn** er fortsatt de fleste krasjene, særlig i de første skrittene. Nærsynet ser
+  28 % av dem. Neste naturlige grep er å la øyet lese hindringene (ikke bare agent og mål), så
+  bevegelsen kan regnes ut fra to bilder i stedet for å læres inn i h.
+- **Drømmesiden** (steg 9) viser fortsatt den stille verdenen.
+
+Martin: "kan fremtidig utvikling gjøres med mindre trening? Føler veldig mye tid bare brukes på det og
+ikke selve utviklingen". Fra nå av: idéer prøves på lite data (rundt 2000 episoder) og korte
+kjøringer (rundt 25 generasjoner), sjekkpunkter finjusteres i stedet for å trenes fra null, og det
+kjøres én full trening med én seed per steg, bare for tallene som vises fram. Steg 10 brukte
+allerede finjustering (D65) og diagnoseskript før trening (D67), og den ekstra seeden ble stoppet.

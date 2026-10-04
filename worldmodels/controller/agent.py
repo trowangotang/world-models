@@ -125,6 +125,7 @@ def collect_agent_rollouts(
     seed: int,
     epsilon: float = 0.3,
     batch_size: int = 500,
+    config: GridConfig | None = None,
 ) -> dict:
     """Samle episoder med agenten (og litt utforsking) til out_dir, i biter for å spare minne."""
     out = Path(out_dir)
@@ -132,7 +133,8 @@ def collect_agent_rollouts(
     counts = {"goal": 0.0, "obstacle": 0.0, "truncated": 0.0}
     for start in range(0, num_episodes, batch_size):
         n = min(batch_size, num_episodes - start)
-        stats, episodes = play_episodes(agent, n, seed=seed + start, epsilon=epsilon, rng_seed=seed + start, record=True)
+        stats, episodes = play_episodes(agent, n, seed=seed + start, epsilon=epsilon, rng_seed=seed + start, record=True,
+                                         config=config)
         for j, ep in enumerate(episodes):
             save_episode(ep, out / f"episode_{start + j:05d}.npz")
         for k in counts:

@@ -39,6 +39,9 @@ class GridConfig:
     grid_size: int = 8          # rutenettet er grid_size x grid_size celler
     cell_px: int = 8            # piksler per celle -> bilde på grid_size * cell_px
     num_obstacles: int = 6
+    # Så mange av hindringene beveger seg én celle per skritt, rett fram til de møter kanten, en
+    # annen hindring eller målet, og snur da (decisions.md D64). 0 = den gamle, stille verdenen.
+    moving_obstacles: int = 0
     max_steps: int = 50
     reward_goal: float = 1.0
     reward_obstacle: float = -1.0
@@ -57,6 +60,8 @@ class GridDodgeEnv:
       * Å gå inn i en hindring: episoden avsluttes med reward_obstacle.
       * Å nå målet: episoden avsluttes med reward_goal.
       * Etter max_steps skritt avkortes episoden (truncated=True).
+      * Med moving_obstacles > 0 flytter de bevegelige hindringene seg etter agenten i hvert skritt.
+        Flytter en hindring seg inn i agenten, avsluttes episoden som om agenten gikk inn i den.
     """
 
     def __init__(self, config: GridConfig | None = None, seed: int | None = None):
@@ -64,10 +69,14 @@ class GridDodgeEnv:
         c = self.config
         if c.num_obstacles > c.grid_size * c.grid_size - 2:
             raise ValueError("For mange hindringer for rutenettet")
+        if not 0 <= c.moving_obstacles <= c.num_obstacles:
+            raise ValueError("moving_obstacles må være mellom 0 og num_obstacles")
         self._rng = np.random.default_rng(seed)
         self.agent_pos: tuple[int, int] = (0, 0)
         self.goal_pos: tuple[int, int] = (0, 0)
         self.obstacles: frozenset[tuple[int, int]] = frozenset()
+        # De bevegelige hindringene: posisjon og retning, i fast rekkefølge
+        self.movers: list[tuple[tuple[int, int], tuple[int, int]]] = []
         self.steps = 0
         self._done = True
 
@@ -119,6 +128,12 @@ class GridDodgeEnv:
             reward = c.reward_goal
             terminated = True
             event = "goal"
+        elif self.movers:
+            self.obstacles, self.movers = self._moved_obstacles()
+            if self.agent_pos in self.obstacles:
+                reward = c.reward_obstacle
+                terminated = True
+                event = "obstacle"
         truncated = not terminated and self.steps >= c.max_steps
         self._done = terminated or truncated
 
@@ -138,6 +153,14 @@ class GridDodgeEnv:
         # også når den står oppå målet eller en hindring i siste bilde.
         self._fill_cell(img, self.agent_pos, COLOR_AGENT, margin=max(1, c.cell_px // 8))
         return img
+
+    def next_obstacles(self) -> frozenset[tuple[int, int]]:
+        """Hvor hindringene står etter neste skritt. Avhenger ikke av hva agenten gjør."""
+        return self._moved_obstacles()[0] if self.movers else self.obstacles
+
+    def danger(self) -> frozenset[tuple[int, int]]:
+        """Cellene agenten krasjer i om den går dit nå: der hindringene står, og der de flytter seg."""
+        return self.obstacles | self.next_obstacles()
 
     def render_ascii(self) -> str:
         """Tekstversjon av verden, nyttig i tester og feilsøking."""
@@ -172,6 +195,32 @@ class GridDodgeEnv:
         self.agent_pos = coords[0]
         self.goal_pos = coords[1]
         self.obstacles = frozenset(coords[2:])
+        self.movers = []
+        if c.moving_obstacles:
+            # Retningene trekkes bare når noen beveger seg, så de stille brettene er som før
+            dirs = self._rng.integers(len(ACTIONS), size=c.moving_obstacles)
+            self.movers = [(coords[2 + i], ACTIONS[int(d)]) for i, d in enumerate(dirs)]
+
+    def _moved_obstacles(self):
+        """Flytt de bevegelige hindringene ett skritt, uten å endre miljøet.
+
+        Hver går én celle i sin retning. Er cellen utenfor kanten, opptatt av en annen hindring
+        eller målet, snur den og prøver motsatt vei; er den også stengt, blir den stående.
+        Hindringene flyttes etter tur, så en hindring ser de som allerede har flyttet seg."""
+        g = self.config.grid_size
+        occupied = set(self.obstacles)
+        movers = []
+        for pos, (dr, dc) in self.movers:
+            occupied.discard(pos)
+            new = pos
+            for vr, vc in ((dr, dc), (-dr, -dc)):
+                cand = (pos[0] + vr, pos[1] + vc)
+                if 0 <= cand[0] < g and 0 <= cand[1] < g and cand not in occupied and cand != self.goal_pos:
+                    new, (dr, dc) = cand, (vr, vc)
+                    break
+            occupied.add(new)
+            movers.append((new, (dr, dc)))
+        return frozenset(occupied), movers
 
     def _goal_reachable(self) -> bool:
         """Bredde-først-søk fra agent til mål rundt hindringene."""

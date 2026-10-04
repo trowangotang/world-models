@@ -4,7 +4,8 @@ Alle har samme grensesnitt:
     policy.reset(envs)              før første skritt
     actions = policy.act(obs, envs) obs: (B, 64, 64, 3), returnerer (B,) handlinger
 
-Grunnlinjene merket "juks" leser miljøets interne tilstand (posisjoner og hindringer). De er
+Grunnlinjene merket "juks" leser miljøets interne tilstand (posisjoner og hindringer, og hvor de
+bevegelige hindringene står etter neste skritt). De er
 ikke konkurrenter, men målestokker: hvor godt kan man gjøre det med full kunnskap?
 """
 
@@ -71,8 +72,8 @@ class SafeRandomBaseline:
             if env._done:  # ferdige episoder får en handling som ignoreres
                 out.append(0)
                 continue
-            safe = [a for a in range(NUM_ACTIONS) if next_cell(env, env.agent_pos, a) not in env.obstacles]
-            out.append(self.rng.choice(safe))
+            safe = [a for a in range(NUM_ACTIONS) if next_cell(env, env.agent_pos, a) not in env.danger()]
+            out.append(self.rng.choice(safe or list(range(NUM_ACTIONS))))
         return np.array(out)
 
 
@@ -123,10 +124,10 @@ class GreedySafeBaseline:
                 out.append(0)
                 continue
             (r, c), (gr, gc) = env.agent_pos, env.goal_pos
-            safe = [a for a in range(NUM_ACTIONS) if next_cell(env, env.agent_pos, a) not in env.obstacles]
+            safe = [a for a in range(NUM_ACTIONS) if next_cell(env, env.agent_pos, a) not in env.danger()]
             good = [a for a in safe if (ACTIONS[a][0] and np.sign(gr - r) == ACTIONS[a][0])
                     or (ACTIONS[a][1] and np.sign(gc - c) == ACTIONS[a][1])]
-            out.append(self.rng.choice(good or safe))
+            out.append(self.rng.choice(good or safe or list(range(NUM_ACTIONS))))  # helt innestengt: alt er like ille
         return np.array(out)
 
 
@@ -141,8 +142,12 @@ class ShortestPathBaseline:
     def act(self, obs, envs):
         out = []
         for env, dist in zip(envs, self.dist):
-            options = [(dist.get(next_cell(env, env.agent_pos, a), 10 ** 6), a) for a in range(NUM_ACTIONS)]
-            out.append(min(options)[1])
+            # Med bevegelige hindringer er avstandene fra starten bare et anslag, og den holder seg
+            # unna cellene som blir farlige i neste skritt (D64).
+            danger = env.danger()
+            options = [(next_cell(env, env.agent_pos, a) in danger, dist.get(next_cell(env, env.agent_pos, a), 10 ** 6), a)
+                       for a in range(NUM_ACTIONS)]
+            out.append(min(options)[2])
         return np.array(out)
 
 

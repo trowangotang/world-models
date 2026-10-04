@@ -40,6 +40,15 @@ class EyeMemory:
     def __len__(self) -> int:
         return len(self.goal)
 
+    @classmethod
+    def fresh(cls, n: int, cells: int) -> "EyeMemory":
+        """Hukommelsen før første bilde: virker i observe som memory=None, men kan slås sammen med andre."""
+        return cls(torch.zeros(n, cells), torch.full((n, cells), 1 / cells), torch.zeros(n, cells))
+
+    @classmethod
+    def concat(cls, parts: list["EyeMemory"]) -> "EyeMemory":
+        return cls(*(torch.cat([getattr(m, f) for m in parts]) for f in ("goal", "agent", "visits")))
+
     def subset(self, idx) -> "EyeMemory":
         return EyeMemory(self.goal[idx], self.agent[idx], self.visits[idx])
 
