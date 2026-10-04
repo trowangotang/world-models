@@ -561,3 +561,53 @@ hindringer. Nytt på siden:
 
 På de 11 brettene spådde M 79 % av cellene en hindring flyttet seg inn i, og 95 % av spådommene var
 riktige. Se D73.
+
+## Steg 14: førsteperson
+
+Samme brett, men agenten ser verden innenfra, som i et gammelt Doom-spill, og styrer med fram, snu
+venstre, snu høyre og rygg. Bildet tegnes med raycasting i numpy (`worldmodels/env/raycast.py`).
+
+![Seks episoder ovenfra (over) og det agenten ser (under)](evaluation_fp/strips.png)
+
+```bash
+# Data: 4000 + 16 000 tilfeldige episoder i førsteperson, med fasiten ovenfra ved siden av
+python -m worldmodels.data --first-person --episodes 4000 --out data/fp_4k
+python -m worldmodels.data --first-person --episodes 16000 --seed 4000 --out data/fp_16k
+
+# V: videre fra den gamle VAE-en, vekt bare på fargerike piksler (6 epoker, ~5 min)
+python -m worldmodels.vae.train --data data/fp_4k --out checkpoints/vae_fp.pt --epochs 6 \
+    --frames-per-episode 8 --colourful --init-from checkpoints/vae_z32_w10.pt
+
+# M med kompass (30 epoker på 20k episoder, ~20 min)
+python -m worldmodels.mdnrnn.encode --vae checkpoints/vae_fp.pt --data data/fp_4k --out data/zseq_fp_4k.npz
+python -m worldmodels.mdnrnn.encode --vae checkpoints/vae_fp.pt --data data/fp_16k --out data/zseq_fp_16k.npz
+python -m worldmodels.mdnrnn.train --data data/zseq_fp_4k.npz data/zseq_fp_16k.npz \
+    --out checkpoints/mdnrnn_fp20k.pt --epochs 30 --compass-weight 1
+python docs/experiments/scripts/fp_compass_check.py   # diagnose: kompasset og en håndlaget regel
+
+# C i drømmen: kompass + fremsyn, uten rygging (60 generasjoner, ~10 min)
+python -m worldmodels.controller.train --vae checkpoints/vae_fp.pt --rnn checkpoints/mdnrnn_fp20k.pt \
+    --data data/zseq_fp_4k.npz data/zseq_fp_16k.npz --out checkpoints/controller_fp.npz \
+    --optimizer cma --zh-std 0 --sigma 0.5 --compass --lookahead --shaping 0.05 --charge-remaining \
+    --first-person --no-back --generations 60
+
+# Evaluering på 2000 brett
+python -m worldmodels.evaluation.firstperson --out docs/evaluation_fp
+```
+
+Det nye i verdensmodellen er **kompasset**: M sier hvor målet er sett fra agenten (celler fram, celler
+til høyre) og om den har sett det, også når målet er ute av bildet. Når målet er sett, bommer det med
+2 celler i snitt og har riktig side 92 % av gangene.
+
+| Policy (2000 brett, førsteperson) | Mål | Krasj | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 12 % | 60 % | 28 % | −0,75 |
+| **Steg 14: verdensmodell-agenten** | **75 % (73–77)** | **0 %** | 25 % | **+0,55** |
+| Håndlaget regel på kompass + fremsyn | 83 % | 0 % | 17 % | +0,60 |
+| *Juks: samme regel med fasit* | 82 % | 0 % | 18 % | +0,67 |
+| *Juks: korteste vei* | 100 % | 0 % | 0 % | +0,94 |
+
+- **Ingen krasj**, etter at controlleren mistet rygg-knappen: med den gikk den baklengs inn i det den
+  ikke så (D79).
+- **Det som gjenstår:** i en av fire episoder går agenten seg fast, oftest ved å snu fram og tilbake
+  på stedet. To tall om egne vaner hjalp ikke (D80). Se D75–D81.

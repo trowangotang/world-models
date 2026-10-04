@@ -930,3 +930,96 @@ Martin valgte "Porteføljeside" som neste steg: en kort README-forside og en ove
 - **README er nå en forside** på rundt 100 linjer: hva prosjektet er, sluttresultatet, lenker til de to
   sidene, arkitekturen og statustabellen. Alle kommandoene og resultatene per steg er flyttet uendret til
   `docs/steg.md`, med lenkene rettet.
+
+## Steg 14: førsteperson
+
+Martin valgte "førsteperson på samme brett": agenten ser verden innenfra, som i et gammelt Doom-spill,
+i stedet for ovenfra. Artikkelen gjorde noe lignende med VizDoom.
+
+### D75. Samme brett og regler, nytt bilde og relative handlinger
+- **`GridConfig(first_person=True)`** gir et 64x64-bilde tegnet med raycasting (`env/raycast.py`, bare
+  numpy): én stråle per bildekolonne, 90 graders synsfelt, kamera midt i cellen. Hindringene (røde) og
+  målet (grønt) er hele kuber, kanten er en grå vegg. Sider som vender sideveis er litt mørkere, og det
+  som er langt unna blir mørkere (tåke), så både hjørner og dybde synes.
+- **Handlingene er relative, som i Doom:** fram, snu venstre, snu høyre og rygg. Å snu bruker et skritt
+  uten å flytte agenten. Med de gamle handlingene (opp/ned/venstre/høyre) måtte agenten vite hvilken vei
+  den ser for å vite hva "mål rett fram" betyr, og det står ikke i bildet.
+- **Brettene er de samme** som ovenfra med samme seed: retningen agenten starter i trekkes etter brettet.
+  Ellers er reglene uendret (50 skritt, +1/−1/−0,01), så tallene kan sammenlignes, men å snu koster nå
+  skritt.
+- **Fasiten lagres ved siden av:** episodene i førsteperson har også bildet ovenfra og retningen
+  (`topdown`, `heading`). Etikettene (hvor er målet, sett fra agenten) leses derfra med den gamle
+  `parse_cells`, så ingenting annet måtte skrives om.
+- Agenten ser nå bare det som er foran den. Står den rett foran en vegg eller hindring, fyller den
+  hele bildet. Minnet blir viktig på en ny måte: målet forsvinner ut av bildet når agenten snur.
+- **Feil rettet underveis:** `.gitignore` hadde `data/`, som også traff `worldmodels/data/`. Modulen
+  for rollouts har derfor aldri vært på GitHub, og en fersk klone feilet på import. Nå står det
+  `/data/` og `/checkpoints/`, og modulen er med.
+
+### D76. Øyet trenes videre fra den gamle VAE-en, med vekt bare på farger
+- Samme arkitektur (z = 32), startet fra `vae_z32_w10` og trent 6 epoker på 4000 tilfeldige episoder
+  (8 bilder per episode): 45 sekunder per epoke. Rekonstruksjonene viser hindringer, mål, vegger og dybde.
+- **Vektingen er endret:** før fikk alt som ikke var bakgrunn vekt 10. I førsteperson er tak, gulv og
+  vegger store grå flater, så nå får bare fargerike piksler vekt 10 (`--colourful`). Det er hindringene
+  og målet, også langt unna og mørke av tåken.
+
+### D77. Kompasset: hvor er målet, sett fra agenten?
+Det som virket ovenfra (øyet leser et 8x8-kart, D48) gir ikke mening i førsteperson. I stedet får M et
+**kompass** (`MDNRNNConfig.compass`): et lite nett som fra minnet før skrittet og bildet nå sier hvor
+målet er, som (celler fram, celler til høyre), og hvor sikker den er på at den har sett målet.
+
+- Det trenes sammen med resten av M (`--compass-weight 1`), med fasiten fra bildene ovenfra. Det tvinger
+  minnet til å holde rede på målet når det forsvinner ut av bildet, og regne om plassen når agenten snur
+  eller går.
+- **Egosentrisk passer en lineær controller:** mål til høyre betyr snu til høyre, mål foran betyr gå fram.
+  Ovenfra måtte controlleren regne ut retningen fra to posisjoner.
+- Kompasset gir også formet belønning i drømmen (`--shaping`, D37): avstanden er |fram| + |høyre|.
+- **Diagnose før controller-trening** (`docs/experiments/scripts/fp_compass_check.py`, 500 episoder
+  M ikke er trent på): når målet er sett, bommer kompasset med 2,0 celler i snitt og har riktig side 92 %
+  av gangene. En håndlaget regel på kompasset og fremsynet når målet i 83 %, like godt som den samme
+  regelen med fasit (82 %). Kompasset er altså godt nok; resten er controllerens jobb.
+
+### D78. M på 20 000 episoder, ikke 4000
+Med 4000 episoder overtilpasset kompasset seg etter rundt 15 epoker (valideringstapet steg igjen), og
+bommet med 2,5 celler. 16 000 tilfeldige episoder til tok 7 minutter å samle, og M trent 30 epoker på
+alle 20 000 (20 minutter) bommer med 1,7–2,0. VAE-en ble ikke trent på nytt.
+
+### D79. Controlleren får ikke rygge
+Første forsøk (kompass + fremsyn + [z, h], CMA-ES i drømmen som i steg 4d) ga 33 % mål og over 50 % krasj.
+Controlleren hadde lært å gå **baklengs**: 67 % av handlingene var rygg. Bak seg ser den ingenting, så
+M visste lite om hva som var der, og drømmen lovet færre krasj enn det ble.
+
+Nå velger controlleren bare mellom fram, snu venstre og snu høyre (`--no-back`): den må se dit den går.
+Rygg er siste handling, så M kjenner fortsatt alle fire, og de tilfeldige dataene trenger ikke samles på
+nytt. Resultatet i en kort test: 56 % mål og **0 % krasj**. VizDoom-agenten i artikkelen hadde heller ikke
+rygg.
+
+### D80. Vaner mot å spinne hjalp ikke
+Det som gjenstår er at agenten går seg fast: den snur fram og tilbake, eller går i en vegg. Vi prøvde to
+tall agenten vet om seg selv (`--habits`): hvor mange ganger på rad den har snudd, og om forrige skritt
+fram ikke endret bildet. To korte kjøringer ga 60 % og 67 % mål, mot 68 % uten. Drømmen er 10 skritt lang,
+og der koster det nesten ingenting å spinne litt, så søket lærer ikke å bruke dem. Valget ligger igjen
+som et flagg, men brukes ikke.
+
+### D81. Resultat: 75 % mål og ingen krasj i førsteperson
+Én full kjøring (60 generasjoner, seed 0, `controller_fp.npz`), 2000 nye brett
+(`python -m worldmodels.evaluation.firstperson`, `docs/evaluation_fp/report.md`):
+
+| | Mål | Krasj | Avkortet | Avkastning |
+|---|---:|---:|---:|---:|
+| Tilfeldig | 11,8 % | 60,2 % | 28,0 % | −0,75 |
+| **Steg 14: verdensmodell-agenten** | **74,9 % (73–77)** | **0,0 %** | 25,1 % | **+0,55** |
+| Håndlaget regel på kompass + fremsyn | 83,2 % | 0,0 % | 16,8 % | +0,60 |
+| Juks: samme regel med fasit | 81,6 % | 0,0 % | 18,4 % | +0,67 |
+| Juks: korteste vei | 100 % | 0 % | 0 % | +0,94 |
+
+- Agenten krasjer aldri, og når den kommer frem, bruker den bare en tredjedel flere skritt enn korteste
+  vei (effektivitet 75 %, mot 53 % for den håndlagde regelen).
+- Ovenfra nådde steg 8 93 % på de samme brettene. Forskjellen er nesten bare avkortede episoder: av
+  dem spinner rundt halvparten på stedet, ofte inneklemt mellom hindringer nær målet.
+- Drømmen er ærlig om krasj (1 % lovet, 0 % skjedde), men lover bare 12 % mål innen 10 skritt. Med snu
+  tar veien til målet ofte mer enn 10 skritt, så det meste av læringen kommer fra kompassets formede
+  belønning.
+- **Mulige neste steg:** lengre drømmer, eller et minne om hvor agenten har snudd (som besøkene i steg 8),
+  slik at den slipper å spinne. Og bevegelige hindringer i førsteperson: miljøet støtter det allerede
+  (`--moving 3`).
