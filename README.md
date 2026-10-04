@@ -38,6 +38,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 7. Drømmen ser | `worldmodels/mdnrnn/neighbours.py` | ✅ når målet i 75 %, krasjer i 11 % |
 | 8. Slutt på pendlingen | `worldmodels/mdnrnn/tracker.py` | ✅ når målet i 93 %, krasjer i 7 %, pendler aldri |
 | 9. Vis drømmen | `worldmodels/dreamview` | ✅ [interaktiv side](docs/drom/index.html) med drøm og virkelighet side om side |
+| 10. Bevegelige hindringer | `worldmodels/env`, `worldmodels/mdnrnn/neighbours.py` | ✅ når målet i 83 % (steg 8: 79 %), drømmen er ærlig om krasj |
 
 ## Miljøet: GridDodge
 
@@ -214,6 +215,30 @@ python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_sense.pt --data 
 ```bash
 # Tar opp 11 brett med sluttagenten og skriver én selvstendig HTML-fil (~1 min, ~0,7 MB)
 python -m worldmodels.dreamview --out docs/drom/index.html
+```
+
+### Steg 10: bevegelige hindringer
+
+```bash
+# Data fra verdenen der 3 av 6 hindringer beveger seg: tilfeldig og med steg 8-agenten
+python -m worldmodels.data --episodes 20000 --moving 3 --out data/moving/rollouts_20k
+PYTHONPATH=. python docs/experiments/scripts/agent_rollouts.py --moving 3 --episodes 10000 --out data/moving/rollouts_agent
+python -m worldmodels.mdnrnn.encode --data data/moving/rollouts_20k --out data/moving/zseq_20k.npz
+python -m worldmodels.mdnrnn.encode --data data/moving/rollouts_agent --out data/moving/zseq_agent.npz
+# M finjusteres fra steg 7/8-modellen, og nærsynet får M sitt minne (--memory)
+python -m worldmodels.mdnrnn.train --data data/moving/zseq_*.npz --init-from checkpoints/mdnrnn_sense.pt \
+    --epochs 10 --lr 5e-4 --out checkpoints/mdnrnn_moving_core.pt
+python -m worldmodels.mdnrnn.train --data data/moving/zseq_*.npz --init-from checkpoints/mdnrnn_moving_core.pt \
+    --epochs 20 --lr 3e-4 --out checkpoints/mdnrnn_moving_core30.pt
+python -m worldmodels.mdnrnn.neighbours --rnn checkpoints/mdnrnn_moving_core30.pt --data data/moving/zseq_*.npz \
+    --memory --epochs 8 --out checkpoints/mdnrnn_moving.pt
+# Samme controlleroppsett som steg 8, i den nye drømmen; de ekte kontrollene kjøres med bevegelige hindringer
+python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_moving.pt --data data/moving/zseq_*.npz \
+    --use-eye --track --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
+    --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256 --seed 0 --moving 3 --out checkpoints/controller_moving.npz
+# Evaluering i verdenen med bevegelige hindringer, og hvor krasjene skjer
+python -m worldmodels.evaluation --moving 3 --out docs/evaluation_moving
+PYTHONPATH=. python docs/experiments/scripts/crash_check.py mdnrnn_sense.pt:controller_track.npz mdnrnn_moving.pt:controller_moving.npz
 ```
 
 ## Resultater fra steg 2
@@ -496,6 +521,34 @@ GitHub viser den bare som kode). Velg et brett og spill av episoden. For hvert s
 
 Brettene velges automatisk fra evalueringsbrettene i fire grupper: omveier rundt hindringer, brett
 steg 7 pendlet på, rett fram og krasj. Se D61–D63.
+
+## Steg 10: bevegelige hindringer
+
+Nå beveger tre av de seks hindringene seg én celle per skritt og snur når de møter noe. De har samme
+farge som de andre, så ett bilde viser ikke hvor de er på vei. Agenten må huske hva den har sett.
+
+![Bevegelige hindringer](docs/evaluation_moving/final_strips.png)
+
+*Steg 10-agenten med bevegelige hindringer: øverst når den målet, nederst flytter en hindring seg inn i den.*
+
+Det nye er nesten bare i M: den er finjustert på data fra den nye verdenen, og nærsynet får M sitt
+minne h, så det kan spå "fare" (en hindring er der nå, eller kommer dit i neste skritt) i stedet for
+bare "hindring". Controlleren er trent i den nye drømmen med samme oppsett som steg 8.
+
+| Policy (2000 brett, 95 %-intervall) | Mål | Krasj | Avkastning |
+|---|---:|---:|---:|
+| Steg 8, uendret | 79 % | 22 % | +0,53 |
+| **Steg 10: bevegelige hindringer** | **83 % (81–85)** | **17 % (15–19)** | **+0,62** |
+| *Juks: mot målet, unngår faren* | 99 % | 0 % | +0,93 |
+
+- **+4,6 poeng mål** mot steg 8 på de samme brettene, mest på lange avstander (68 % mot 59 %).
+- **Drømmen er ærlig igjen:** steg 8 sin drøm vet ikke at hindringer flytter seg, og lover 3 % krasj
+  der 9 % skjer. Steg 10 sin lover 7 %, og 7 % skjer.
+- **Det som gjenstår:** to av tre krasj er hindringer som flytter seg inn i agenten, ofte i første
+  skritt før noen kan se hvor de skal. Nærsynet ser 28 % av slike, mot 5 % uten minne. To idéer
+  som ikke hjalp (drømmer fra første skritt, og forrige bilde til nærsynet) står i D67.
+
+Full rapport: [`docs/evaluation_moving/report.md`](docs/evaluation_moving/report.md). Se D64–D69.
 
 ## Prosjektstruktur
 
