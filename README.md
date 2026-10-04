@@ -37,6 +37,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 6. Bedre syn | `worldmodels/mdnrnn/eye.py` | ⚠️ øyet ser riktig, men drømmen tror ikke på det |
 | 7. Drømmen ser | `worldmodels/mdnrnn/neighbours.py` | ✅ når målet i 75 %, krasjer i 11 % |
 | 8. Slutt på pendlingen | `worldmodels/mdnrnn/tracker.py` | ✅ når målet i 93 %, krasjer i 7 %, pendler aldri |
+| 9. Vis drømmen | `worldmodels/dreamview` | ✅ [interaktiv side](docs/drom/index.html) med drøm og virkelighet side om side |
 
 ## Miljøet: GridDodge
 
@@ -206,6 +207,13 @@ PYTHONPATH=. python docs/experiments/scripts/oscillation.py
 python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_sense.pt --data data/v3/zseq_*.npz \
     --use-eye --track --lookahead --charge-remaining --temperature 0 --shaping 0.05 \
     --optimizer cma --sigma 0.5 --zh-std 0 --generations 200 --starts 256 --seed 1 --out checkpoints/controller_track.npz
+```
+
+### Steg 9: vis drømmen
+
+```bash
+# Tar opp 11 brett med sluttagenten og skriver én selvstendig HTML-fil (~1 min, ~0,7 MB)
+python -m worldmodels.dreamview --out docs/drom/index.html
 ```
 
 ## Resultater fra steg 2
@@ -472,6 +480,23 @@ til, og lærer selv i drømmen at det ikke lønner seg å gå tilbake.
 
 ![Samme brett](docs/evaluation/compare_paths.png)
 
+## Steg 9: vis drømmen
+
+[`docs/drom/index.html`](docs/drom/index.html) er en side du kan åpne i nettleseren (last ned filen,
+GitHub viser den bare som kode). Velg et brett og spill av episoden. For hvert skritt ser du:
+
+- **Virkeligheten:** det ekte brettet og veien så langt.
+- **Det agenten ser:** bildet etter VAE-en, med det agenten tror. Du kan bytte mellom filteret fra
+  steg 8, øyet alene og målminnet, og se hvor ofte øyet alene tar feil.
+- **Drømmen:** fra akkurat dette skrittet drømmer M ti skritt fram mens controlleren styrer, slik som
+  under trening. Filmstripen viser hvert drømmebilde med modellens sannsynlighet for mål og krasj.
+- **Samme handlinger, ekte:** de samme handlingene tatt i det ekte spillet, så du ser hvor drømmen
+  holder og hvor den glipper.
+- **Valget:** krasjrisikoen, besøkene og skåren for hver handling.
+
+Brettene velges automatisk fra evalueringsbrettene i fire grupper: omveier rundt hindringer, brett
+steg 7 pendlet på, rett fram og krasj. Se D61–D63.
+
 ## Prosjektstruktur
 
 ```
@@ -482,6 +507,7 @@ worldmodels/
   mdnrnn/       koding til z-sekvenser, MDN-RNN, øyet, nærsynet, sporing, trening og evaluering
   controller/   lineær controller og inndata, ES og CMA-ES, drømmemiljø, kjøring i ekte miljø, iterativ trening
   evaluation/   steg 5: grunnlinjer, evaluering med intervaller, drøm mot virkelighet, figurer og rapport
+  dreamview/    steg 9: tar opp drøm og virkelighet og lager den interaktive siden
 tests/          enhetstester (pytest)
 docs/           bilder til README, evalueringsrapporten, resultater og diagnoseskript fra eksperimenter
 decisions.md    logg over valg og begrunnelser

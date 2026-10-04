@@ -692,3 +692,46 @@ På de samme 2000 brettene som i steg 5–7:
   I de første skrittene har filteret bare sett ett bilde, så det kan ikke rette øyet ennå.
 - **Avstand til juksen:** 6 poeng under grunnlinjen som leser miljøet direkte. Hullet er nesten
   bare krasj.
+
+## Steg 9: vis drømmen
+
+Martin: "vis drømmen først også kan vi legge til bevegelige hindringer etterpå".
+
+### D61. Én selvstendig HTML-fil, uten byggeverktøy
+`python -m worldmodels.dreamview` spiller noen brett med sluttagenten, tar opp alt underveis
+(`dreamview/record.py`) og skriver dataene inn i malen `dreamview/page.html`. Resultatet er én fil,
+`docs/drom/index.html` (0,7 MB), som virker uten server, rammeverk eller nett, bortsett fra skriftene.
+
+- **Bare modellenes bilder lagres som bilder.** Det ekte brettet tegnes i nettleseren fra
+  posisjonene. VAE-rekonstruksjonene og drømmebildene for ett brett ligger stablet i én PNG.
+- **Fargene rundes til 16 nivåer.** Bildene fra modellene er uskarpe, så det synes ikke, men PNG-ene
+  blir omtrent seks ganger mindre (384 kB → 61 kB for et brett med 55 bilder).
+- **Ingen nye avhengigheter.** PNG-ene skrives med den samme lille zlib-koderen som før
+  (`env/preview.py`, nå med `png_bytes`).
+
+### D62. Hva siden viser, og hvordan drømmen sammenlignes med virkeligheten
+I hvert ekte skritt starter en ny drøm fra agentens tilstand akkurat da, med samme regler som under
+trening: temperatur 0, hendelser fra nærsynet og sporing. Drømmen varer i ti skritt, eller til den er
+over både i drømmen og i virkeligheten.
+
+Virkeligheten ved siden av tar **de samme handlingene** som drømmen valgte, i en kopi av miljøet. Den
+spiller altså blindt etter drømmen og retter seg ikke etter det den ser. Det gjør sammenligningen
+rettferdig mot drømmen: der de skiller lag, er det modellen som tok feil, ikke agenten som valgte
+annerledes.
+
+Brettene velges automatisk fra de 1000 første evalueringsbrettene (seeds fra 200000), de første i
+hver gruppe: 4 omveier rundt hindringer, 3 brett steg 7 pendlet på, 2 rett fram og 2 krasj.
+
+### D63. Hva vi ser i drømmene
+Over alle 65 drømmene på de 11 brettene (et lite og ikke tilfeldig utvalg, så bare en pekepinn):
+
+- Drømmen spår riktig utfall (mål, krasj eller ingen av delene innen ti skritt) i 83 %.
+- Den lover mål i 85 % av drømmene, og de samme handlingene gir mål i 80 % i virkeligheten.
+- Den undervurderer krasj: 5 % lovet mot 17 % i virkeligheten. 11 drømmer endte i krasj i den blinde
+  virkeligheten. 6 av dem skjedde i drømmeskritt 1–2, der drømmen ga krasj 2–89 % (snitt 28 %), og
+  5 skjedde senere (skritt 3–10), der drømmen ga krasj 0–14 %. Utover i drømmen blir bildet uskarpt,
+  og agenten kan gå rett gjennom en hindring i drømmen. I det ekte spillet ser agenten et nytt bilde
+  hvert skritt og retter seg, så dette er et mål på hvor langt drømmen holder, ikke krasjraten til
+  agenten (7 %).
+- Øyet alene så agenten i feil celle i 3 av 65 ekte skritt, alle på omveiene. Filteret fra steg 8
+  var riktig i alle 65. Med valget "Øyet alene" kan man se de tre tilfellene.
