@@ -17,6 +17,7 @@ I denne verdenen beveger 3 av hindringene seg én celle per skritt og snur når 
 | *Korteste vei (juks)* | 98,9 % (98 %–99 %) | 0,2 % (0 %–1 %) | 0,9 % (1 %–1 %) | 0,93 (0,93 – 0,94) | 6,4 |
 | Steg 8: sporing | 78,5 % (77 %–80 %) | 21,6 % (20 %–23 %) | 0,0 % (0 %–0 %) | 0,53 (0,50 – 0,57) | 4,8 |
 | Steg 10: bevegelige hindringer | 83,0 % (81 %–85 %) | 17,0 % (15 %–19 %) | 0,0 % (0 %–0 %) | 0,62 (0,59 – 0,65) | 5,1 |
+| Steg 11: øyet leser hindringene | 89,8 % (88 %–91 %) | 10,1 % (9 %–11 %) | 0,1 % (0 %–0 %) | 0,75 (0,73 – 0,78) | 5,5 |
 
 ![Utfall](outcomes.svg)
 
@@ -27,8 +28,9 @@ Forskjell i prosentpoeng (a − b). «Bare a» er brett der a lyktes og b ikke, 
 | a | b | Mål, endring | Bare a / bare b | Hindring, endring |
 |---|---|---:|---:|---:|
 | Steg 10: bevegelige hindringer | Steg 8: sporing | +4,6 (+3,2 til +6,0) | 152 / 60 | −4,6 (−6,0 til −3,2) |
-| Steg 10: bevegelige hindringer | Tilfeldig | +73,1 (+71,2 til +75,0) | 1471 / 9 | −70,1 (−72,0 til −68,0) |
-| Steg 10: bevegelige hindringer | Rett mot målet, unngår hindringer (juks) | −15,7 (−17,2 til −14,0) | 6 / 319 | +16,9 (+15,2 til +18,5) |
+| Steg 11: øyet leser hindringene | Steg 10: bevegelige hindringer | +6,8 (+5,5 til +8,1) | 162 / 27 | −6,9 (−8,2 til −5,6) |
+| Steg 11: øyet leser hindringene | Tilfeldig | +79,8 (+78,1 til +81,5) | 1600 / 3 | −77,0 (−78,8 til −75,0) |
+| Steg 11: øyet leser hindringene | Rett mot målet, unngår hindringer (juks) | −8,9 (−10,2 til −7,6) | 11 / 189 | +10,1 (+8,8 til +11,3) |
 
 ## Etter avstand til målet
 
@@ -44,6 +46,7 @@ Målrate etter korteste vei fra start til mål (rundt hindringene).
 | Korteste vei (juks) | 100 % | 99 % | 99 % | 98 % |
 | Steg 8: sporing | 94 % | 87 % | 72 % | 59 % |
 | Steg 10: bevegelige hindringer | 96 % | 88 % | 78 % | 68 % |
+| Steg 11: øyet leser hindringene | 97 % | 93 % | 88 % | 79 % |
 
 ![Mål etter avstand](goal_by_distance.svg)
 
@@ -60,6 +63,7 @@ Målrate etter korteste vei fra start til mål (rundt hindringene).
 | Korteste vei (juks) | 100 % | 98 % | 0 % | 0 % |
 | Steg 8: sporing | 92 % | 68 % | 8 % | 32 % |
 | Steg 10: bevegelige hindringer | 94 % | 74 % | 6 % | 26 % |
+| Steg 11: øyet leser hindringene | 97 % | 84 % | 3 % | 16 % |
 
 ## Hvordan episodene ender
 
@@ -74,6 +78,7 @@ Pendling: avkortet, og innom høyst 3 ulike celler de siste 20 skrittene. Effekt
 | Korteste vei (juks) | 19 | 18 | 0,95 | 0 | 4 | 0 |
 | Steg 8: sporing | 0 | 0 | 0,97 | 205 | 215 | 11 |
 | Steg 10: bevegelige hindringer | 0 | 0 | 0,95 | 135 | 190 | 14 |
+| Steg 11: øyet leser hindringene | 2 | 0 | 0,94 | 102 | 89 | 11 |
 
 ## Vet M hvor agenten og målet er?
 
@@ -93,6 +98,12 @@ Mens agenten spiller: andel skritt der M sin tro peker på riktig celle, og snit
 | Steg 10: bevegelige hindringer | øye + sporing | 5 | 100 % | 0,0 | 100 % | 0,0 | 820 |
 | Steg 10: bevegelige hindringer | øye + sporing | 10 | 100 % | 0,0 | 100 % | 0,0 | 83 |
 | Steg 10: bevegelige hindringer | øye + sporing | alle | 98 % | 0,0 | 96 % | 0,1 | 10205 |
+| Steg 11: øyet leser hindringene | øye + sporing | 0 | 92 % | 0,2 | 89 % | 0,3 | 2000 |
+| Steg 11: øyet leser hindringene | øye + sporing | 1 | 99 % | 0,0 | 96 % | 0,1 | 1825 |
+| Steg 11: øyet leser hindringene | øye + sporing | 2 | 100 % | 0,0 | 98 % | 0,0 | 1660 |
+| Steg 11: øyet leser hindringene | øye + sporing | 5 | 100 % | 0,0 | 100 % | 0,0 | 917 |
+| Steg 11: øyet leser hindringene | øye + sporing | 10 | 100 % | 0,0 | 99 % | 0,0 | 120 |
+| Steg 11: øyet leser hindringene | øye + sporing | alle | 98 % | 0,0 | 97 % | 0,1 | 10981 |
 
 ## Drøm mot virkelighet
 
@@ -102,6 +113,7 @@ Etter 5 ekte skritt drømmer agenten 10 skritt videre fra nøyaktig den tilstand
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Steg 8: sporing | 728 | 96,6 % | 90,4 % (88 %–92 %) | 0,83 | 2,8 % | 9,3 % (7 %–12 %) | 0,85 |
 | Steg 10: bevegelige hindringer | 820 | 92,3 % | 93,0 % (91 %–95 %) | 0,85 | 6,9 % | 6,5 % (5 %–8 %) | 0,84 |
+| Steg 11: øyet leser hindringene | 917 | 89,2 % | 95,2 % (94 %–96 %) | 0,91 | 9,1 % | 3,8 % (3 %–5 %) | 0,91 |
 
 ![Drøm mot virkelighet, mål](dream_goal.svg)
 
@@ -109,7 +121,7 @@ Etter 5 ekte skritt drømmer agenten 10 skritt videre fra nøyaktig den tilstand
 
 ## Episoder fra sluttagenten
 
-Steg 10: bevegelige hindringer. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.
+Steg 11: øyet leser hindringene. Øverste rad nådde målet, midterste traff en hindring, nederste ble avkortet. Streken går fra gul (start) til hvit (slutt), og det hvite kvadratet er der episoden endte.
 
 ![Veier](final_paths.png)
 
@@ -119,6 +131,6 @@ Den første episoden av hvert utfall, skritt for skritt (16 første bilder):
 
 ## Samme brett, to agenter
 
-Brett der Steg 8: sporing (øverst) krasjet og Steg 10: bevegelige hindringer (nederst) kom frem.
+Brett der Steg 10: bevegelige hindringer (øverst) krasjet og Steg 11: øyet leser hindringene (nederst) kom frem.
 
 ![Sammenligning](compare_paths.png)
