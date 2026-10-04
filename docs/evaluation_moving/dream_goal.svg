@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="346" viewBox="0 0 640 346">
+<rect width="640" height="346" fill="white"/>
+<text x="10" y="24" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold">Drøm mot virkelighet: nå målet innen 10 skritt</text>
+<line x1="60" y1="300.0" x2="320" y2="300.0" stroke="#e5e5e5"/>
+<text x="54" y="304.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">0 %</text>
+<text x="60.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">0 %</text>
+<line x1="60" y1="248.0" x2="320" y2="248.0" stroke="#e5e5e5"/>
+<text x="54" y="252.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">20 %</text>
+<text x="112.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">20 %</text>
+<line x1="60" y1="196.0" x2="320" y2="196.0" stroke="#e5e5e5"/>
+<text x="54" y="200.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">40 %</text>
+<text x="164.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">40 %</text>
+<line x1="60" y1="144.0" x2="320" y2="144.0" stroke="#e5e5e5"/>
+<text x="54" y="148.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">60 %</text>
+<text x="216.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">60 %</text>
+<line x1="60" y1="92.0" x2="320" y2="92.0" stroke="#e5e5e5"/>
+<text x="54" y="96.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">80 %</text>
+<text x="268.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">80 %</text>
+<line x1="60" y1="40.0" x2="320" y2="40.0" stroke="#e5e5e5"/>
+<text x="54" y="44.0" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="end">100 %</text>
+<text x="320.0" y="316" font-family="Helvetica, Arial, sans-serif" font-size="11" text-anchor="middle">100 %</text>
+<line x1="60" y1="300" x2="320" y2="40" stroke="#999" stroke-dasharray="4 3"/>
+<text x="190.0" y="334" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle">Drømmen sa</text>
+<text x="16" y="170.0" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" transform="rotate(-90 16 170.0)">Det skjedde</text>
+<polyline fill="none" stroke="#1f77b4" stroke-width="1.5" points="64.8,188.6 108.8,300.0 156.7,300.0 218.1,222.0 276.2,145.9 318.1,55.7"/>
+<circle cx="64.8" cy="188.6" r="2.4" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="108.8" cy="300.0" r="2.2" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="156.7" cy="300.0" r="2.4" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="218.1" cy="222.0" r="2.5" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="276.2" cy="145.9" r="2.9" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="318.1" cy="55.7" r="6.3" fill="#1f77b4" fill-opacity="0.7"/>
+<circle cx="348" cy="46" r="4" fill="#1f77b4"/>
+<text x="358" y="50" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 8: sporing</text>
+<polyline fill="none" stroke="#ff7f0e" stroke-width="1.5" points="64.5,252.7 112.4,235.0 164.7,131.0 219.9,83.3 272.8,82.3 316.0,47.4"/>
+<circle cx="64.5" cy="252.7" r="2.6" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="112.4" cy="235.0" r="2.3" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="164.7" cy="131.0" r="2.7" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="219.9" cy="83.3" r="2.9" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="272.8" cy="82.3" r="3.5" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="316.0" cy="47.4" r="6.3" fill="#ff7f0e" fill-opacity="0.7"/>
+<circle cx="348" cy="66" r="4" fill="#ff7f0e"/>
+<text x="358" y="70" font-family="Helvetica, Arial, sans-serif" font-size="12">Steg 10: bevegelige hindringer</text>
+</svg>

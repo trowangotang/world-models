@@ -16,7 +16,7 @@ import numpy as np
 
 from worldmodels.controller.agent import WorldModelAgent
 from worldmodels.controller.policy import LinearController
-from worldmodels.env import GridDodgeEnv
+from worldmodels.env import GridConfig, GridDodgeEnv
 from worldmodels.env.preview import episode_grid, save_png
 from worldmodels.evaluation import figures
 from worldmodels.evaluation.beliefs import belief_accuracy
@@ -49,11 +49,18 @@ AGENTS = (
     ("Steg 8: sporing", "mdnrnn_sense.pt", "controller_track.npz", False),
 )
 
+# Verdenen med bevegelige hindringer (steg 10, --moving): steg 8 slik den er, og agenten som er
+# trent i en drøm der hindringene beveger seg.
+MOVING_AGENTS = (
+    ("Steg 8: sporing", "mdnrnn_sense.pt", "controller_track.npz", False),
+    ("Steg 10: bevegelige hindringer", "mdnrnn_moving.pt", "controller_moving.npz", False),
+)
 
-def load_agents(checkpoints: Path, vae_name: str, log) -> list[WorldModelPolicy]:
+
+def load_agents(checkpoints: Path, vae_name: str, log, agents=AGENTS) -> list[WorldModelPolicy]:
     vae, _ = ConvVAE.load(checkpoints / vae_name)
     out = []
-    for name, rnn_name, ctrl_name, diagnostic in AGENTS:
+    for name, rnn_name, ctrl_name, diagnostic in agents:
         rnn_path, ctrl_path = checkpoints / rnn_name, checkpoints / ctrl_name
         if not (rnn_path.exists() and ctrl_path.exists()):
             log(f"hopper over {name}: mangler {rnn_path} eller {ctrl_path}")
@@ -75,8 +82,8 @@ def pick(records, outcome: str, k: int) -> list[int]:
     return [r.seed for r in records if r.outcome == outcome][:k]
 
 
-def first_frame(seed: int) -> np.ndarray:
-    return GridDodgeEnv().reset(seed=seed)
+def first_frame(seed: int, config: GridConfig | None = None) -> np.ndarray:
+    return GridDodgeEnv(config).reset(seed=seed)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -87,20 +94,22 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--episodes", type=int, default=2000)
     p.add_argument("--seed", type=int, default=EVAL_SEED)
     p.add_argument("--dream-start", type=int, default=5, help="ekte skritt før drøm-mot-virkelighet-testen")
+    p.add_argument("--moving", type=int, default=0, help="så mange hindringer beveger seg (steg 10)")
     a = p.parse_args(argv)
+    config = GridConfig(moving_obstacles=a.moving)
     log = lambda msg: print(msg, flush=True)  # noqa: E731
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     seeds = list(range(a.seed, a.seed + a.episodes))
-    agents = load_agents(Path(a.checkpoints), a.vae, log)
+    agents = load_agents(Path(a.checkpoints), a.vae, log, MOVING_AGENTS if a.moving else AGENTS)
     policies = [RandomBaseline(seed=a.seed), SafeRandomBaseline(seed=a.seed), GreedyGoalBaseline(seed=a.seed),
                 GreedySafeBaseline(seed=a.seed), ShortestPathBaseline(), *agents]
 
     records, summaries = {}, {}
     for policy in policies:
         t0 = time.time()
-        records[policy.name], _ = evaluate_policy(policy, seeds)
+        records[policy.name], _ = evaluate_policy(policy, seeds, config)
         summaries[policy.name] = summarize(records[policy.name])
         s = summaries[policy.name]
         log(f"{policy.name}: mål {s['goal']['rate']:.3f} hindring {s['obstacle']['rate']:.3f} "
@@ -119,14 +128,15 @@ def main(argv: list[str] | None = None) -> None:
     dream = {}
     for policy in agents:
         t0 = time.time()
-        dream[policy.name] = dream_vs_real(policy.agent, seeds, start_step=a.dream_start)
+        dream[policy.name] = dream_vs_real(policy.agent, seeds, start_step=a.dream_start, config=config)
         log(f"drøm mot virkelighet, {policy.name}: [{time.time() - t0:.0f}s]")
 
-    beliefs = {p.name: b for p in agents if (b := belief_accuracy(p.agent, seeds)) is not None}
+    beliefs = {p.name: b for p in agents if (b := belief_accuracy(p.agent, seeds, config)) is not None}
 
-    figure_files = make_figures(out, policies, agents, records, summaries, dream)
+    figure_files = make_figures(out, policies, agents, records, summaries, dream, config)
     results = {
         "seeds": [seeds[0], seeds[-1]],
+        "moving_obstacles": a.moving,
         "policies": [{"name": p.name, "cheat": p.cheat, "diagnostic": getattr(p, "diagnostic", False),
                       **getattr(p, "files", {})} for p in policies],
         "final": final_name(agents),
@@ -142,7 +152,7 @@ def main(argv: list[str] | None = None) -> None:
     log(f"Skrev {out}/report.md, results.json og {len(figure_files)} figurer")
 
 
-def make_figures(out: Path, policies, agents, records, summaries, dream) -> dict:
+def make_figures(out: Path, policies, agents, records, summaries, dream, config: GridConfig | None = None) -> dict:
     files = {}
     rows = [(p.name, summaries[p.name]) for p in policies]
     (out / "outcomes.svg").write_text(figures.outcome_bars_svg(rows))
@@ -164,11 +174,11 @@ def make_figures(out: Path, policies, agents, records, summaries, dream) -> dict
     rs = records[final.name]
     chosen = {o: pick(rs, o, 4) for o in ("goal", "obstacle", "truncated")}
     by_seed = {r.seed: r for r in rs}
-    overlays = [figures.path_overlay(first_frame(s), by_seed[s].path) for o in chosen for s in chosen[o]]
+    overlays = [figures.path_overlay(first_frame(s, config), by_seed[s].path) for o in chosen for s in chosen[o]]
     save_png(figures.tile(overlays, columns=4), out / "final_paths.png")
     files["final_paths"] = "final_paths.png"
     strip_seeds = [s for o in chosen for s in chosen[o][:1]]
-    _, frames = evaluate_policy(final, strip_seeds, keep_frames=strip_seeds)
+    _, frames = evaluate_policy(final, strip_seeds, config, keep_frames=strip_seeds)
     save_png(episode_grid([frames[s] for s in strip_seeds], frames=16), out / "final_strips.png")
     files["final_strips"] = "final_strips.png"
     files["chosen"] = chosen
@@ -183,8 +193,8 @@ def make_figures(out: Path, policies, agents, records, summaries, dream) -> dict
         failure = max(fixed, key=lambda o: len(fixed[o]))
         flips = fixed[failure][:4]
         if flips:
-            imgs = [figures.path_overlay(first_frame(s), prev_by[s].path) for s in flips]
-            imgs += [figures.path_overlay(first_frame(s), by_seed[s].path) for s in flips]
+            imgs = [figures.path_overlay(first_frame(s, config), prev_by[s].path) for s in flips]
+            imgs += [figures.path_overlay(first_frame(s, config), by_seed[s].path) for s in flips]
             save_png(figures.tile(imgs, columns=len(flips)), out / "compare_paths.png")
             files["compare_paths"] = "compare_paths.png"
             files["compare"] = {"a": prev.name, "b": final.name, "seeds": flips, "failure": failure}

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="740" height="290" viewBox="0 0 740 290">
+<rect width="740" height="290" fill="white"/>
+<text x="10" y="24" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="bold">Hvordan episodene endte (2000 like brett)</text>
+<text x="292" y="58" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Tilfeldig</text>
+<rect x="300.0" y="44" width="41.8" height="22" fill="#3cb45a"/>
+<text x="320.9" y="59" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">10</text>
+<rect x="341.8" y="44" width="365.6" height="22" fill="#dc3c3c"/>
+<text x="524.6" y="59" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">87</text>
+<rect x="707.4" y="44" width="12.6" height="22" fill="#9aa0a6"/>
+<text x="292" y="88" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Tilfeldig som unngår hindringer (juks)</text>
+<rect x="300.0" y="74" width="130.4" height="22" fill="#3cb45a"/>
+<text x="365.2" y="89" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">31</text>
+<rect x="430.4" y="74" width="3.8" height="22" fill="#dc3c3c"/>
+<rect x="434.2" y="74" width="285.8" height="22" fill="#9aa0a6"/>
+<text x="577.1" y="89" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">68</text>
+<text x="292" y="118" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Rett mot målet (juks)</text>
+<rect x="300.0" y="104" width="250.3" height="22" fill="#3cb45a"/>
+<text x="425.2" y="119" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">60</text>
+<rect x="550.3" y="104" width="169.7" height="22" fill="#dc3c3c"/>
+<text x="635.2" y="119" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">40</text>
+<rect x="720.0" y="104" width="0.0" height="22" fill="#9aa0a6"/>
+<text x="292" y="148" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Rett mot målet, unngår hindringer (juks)</text>
+<rect x="300.0" y="134" width="414.5" height="22" fill="#3cb45a"/>
+<text x="507.3" y="149" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">99</text>
+<rect x="714.5" y="134" width="0.2" height="22" fill="#dc3c3c"/>
+<rect x="714.8" y="134" width="5.2" height="22" fill="#9aa0a6"/>
+<text x="292" y="178" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Korteste vei (juks)</text>
+<rect x="300.0" y="164" width="415.2" height="22" fill="#3cb45a"/>
+<text x="507.6" y="179" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">99</text>
+<rect x="715.2" y="164" width="0.8" height="22" fill="#dc3c3c"/>
+<rect x="716.0" y="164" width="4.0" height="22" fill="#9aa0a6"/>
+<text x="292" y="208" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Steg 8: sporing</text>
+<rect x="300.0" y="194" width="329.5" height="22" fill="#3cb45a"/>
+<text x="464.7" y="209" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">78</text>
+<rect x="629.5" y="194" width="90.5" height="22" fill="#dc3c3c"/>
+<text x="674.7" y="209" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">22</text>
+<rect x="720.0" y="194" width="0.0" height="22" fill="#9aa0a6"/>
+<text x="292" y="238" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="end">Steg 10: bevegelige hindringer</text>
+<rect x="300.0" y="224" width="348.8" height="22" fill="#3cb45a"/>
+<text x="474.4" y="239" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">83</text>
+<rect x="648.8" y="224" width="71.2" height="22" fill="#dc3c3c"/>
+<text x="684.4" y="239" font-family="Helvetica, Arial, sans-serif" font-size="11" fill="white" text-anchor="middle">17</text>
+<rect x="720.0" y="224" width="0.0" height="22" fill="#9aa0a6"/>
+<rect x="300" y="262" width="12" height="12" fill="#3cb45a"/>
+<text x="316" y="273" font-family="Helvetica, Arial, sans-serif" font-size="12">Mål (%)</text>
+<rect x="410" y="262" width="12" height="12" fill="#dc3c3c"/>
+<text x="426" y="273" font-family="Helvetica, Arial, sans-serif" font-size="12">Hindring (%)</text>
+<rect x="520" y="262" width="12" height="12" fill="#9aa0a6"/>
+<text x="536" y="273" font-family="Helvetica, Arial, sans-serif" font-size="12">Avkortet (%)</text>
+</svg>

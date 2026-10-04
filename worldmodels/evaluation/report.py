@@ -35,6 +35,13 @@ def write_report(path: Path, results: dict, figures: dict) -> None:
         "trening. Tallene i parentes er 95 %-intervaller (Wilson for rater, bootstrap for avkastning). "
         "Policyer merket *juks* leser miljøets indre tilstand og er målestokker, ikke konkurrenter.", "",
         "Generert av `python -m worldmodels.evaluation`. Tolkningen står i README.", "",
+    ]
+    moving = results.get("moving_obstacles", 0)
+    if moving:
+        L[0] = "# Evaluering med bevegelige hindringer"
+        L += [f"I denne verdenen beveger {moving} av hindringene seg én celle per skritt og snur når de møter "
+              "noe (steg 10). Juks-grunnlinjene vet også hvor hindringene står etter neste skritt.", ""]
+    L += [
         "## Hovedtabell", "",
         "| Policy | Mål | Hindring | Avkortet | Avkastning | Snittlengde |",
         "|---|---:|---:|---:|---:|---:|",
