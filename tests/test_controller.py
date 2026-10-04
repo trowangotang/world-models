@@ -417,3 +417,22 @@ def test_controller_with_tracking_saves_flag_and_runs_in_dream_and_reality(world
     pop = np.random.default_rng(0).normal(size=(2, c.num_params))
     assert dream_fitness(c, pop, rnn, starts, DreamConfig(horizon=3, temperature=0.0, shaping=0.1)).shape == (2,)
     assert run_real_episodes(WorldModelAgent(vae, rnn, c), num_episodes=2)["episodes"] == 2
+
+
+def test_warm_starts_from_the_first_frame_match_a_fresh_agent(world):
+    from worldmodels.controller.dream import WarmStarts
+    from worldmodels.mdnrnn.tracker import observe
+
+    _, _, seqs = world
+    torch.manual_seed(0)
+    rnn = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, eye=True, eye_channels=4)).eval()
+    starts = make_warm_starts(rnn, seqs, range(len(seqs)), context=0)
+    assert len(starts) == len(seqs)
+    assert torch.allclose(starts.z, torch.from_numpy(seqs.mu[seqs.obs_offsets]).float())
+    assert (starts.h == 0).all() and (starts.c == 0).all()
+    fresh, none = observe(rnn, starts.z, starts.memory), observe(rnn, starts.z, None)
+    for a, b in zip(fresh[:2], none[:2]):
+        assert torch.allclose(a, b, atol=1e-6)
+    both = WarmStarts.concat([starts, make_warm_starts(rnn, seqs, range(len(seqs)), context=2)])
+    assert len(both) == len(starts) + int((seqs.lengths > 2).sum())
+    assert both.h.shape[1] == len(both)
