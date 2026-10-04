@@ -15,8 +15,8 @@ from pathlib import Path
 import numpy as np
 
 
-def save_png(img: np.ndarray, path: str | Path) -> None:
-    """Skriv et uint8 RGB-bilde (H, W, 3) som PNG med bare zlib."""
+def png_bytes(img: np.ndarray) -> bytes:
+    """Kod et uint8 RGB-bilde (H, W, 3) som PNG med bare zlib."""
     if img.dtype != np.uint8 or img.ndim != 3 or img.shape[2] != 3:
         raise ValueError("Forventer uint8-bilde med form (H, W, 3)")
     h, w, _ = img.shape
@@ -29,7 +29,12 @@ def save_png(img: np.ndarray, path: str | Path) -> None:
     png += chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
     png += chunk(b"IDAT", zlib.compress(raw, 9))
     png += chunk(b"IEND", b"")
-    Path(path).write_bytes(png)
+    return png
+
+
+def save_png(img: np.ndarray, path: str | Path) -> None:
+    """Skriv et uint8 RGB-bilde (H, W, 3) som PNG med bare zlib."""
+    Path(path).write_bytes(png_bytes(img))
 
 
 def episode_grid(episodes: list[np.ndarray], frames: int, scale: int = 2, pad: int = 2) -> np.ndarray:

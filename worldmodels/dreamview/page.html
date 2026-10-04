@@ -1,0 +1,447 @@
+<title>Agentens drøm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: en smal tekstspalte over et instrumentbord med fire bilder side om side
+   (virkelighet, det agenten ser, drømmen, virkeligheten med drømmens handlinger),
+   en filmstripe med drømmen og en tabell over valget. Drøm = lilla, virkelighet = blekk. */
+:root {
+  --bg: #eef0f4;
+  --surface: #ffffff;
+  --fg: #171a24;
+  --muted: #5b6273;
+  --line: #d5d9e2;
+  --dream: #5b4fc4;
+  --dream-soft: #e7e4fb;
+  --good: #1f8a4c;
+  --bad: #c43c3c;
+  /* Fargene i GridDodge, de samme i begge temaer fordi de er selve bildet */
+  --board: rgb(20, 20, 30);
+  --obstacle: rgb(220, 60, 60);
+  --goal: rgb(60, 200, 90);
+  --agent: rgb(70, 130, 240);
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1117; --surface: #181b24; --fg: #e6e8ee; --muted: #959cad; --line: #2b303d;
+    --dream: #a497f5; --dream-soft: #2a2550; --good: #4cc77d; --bad: #f07474;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1117; --surface: #181b24; --fg: #e6e8ee; --muted: #959cad; --line: #2b303d;
+  --dream: #a497f5; --dream-soft: #2a2550; --good: #4cc77d; --bad: #f07474;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.55 var(--font-body);
+  padding-inline: 16px; padding-block: 32px 48px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 28px; }
+h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.05; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; font-weight: 600; }
+p { margin: 0; }
+.intro { display: grid; gap: 12px; max-width: 64ch; }
+.intro p { color: var(--muted); }
+.label {
+  font: 500 0.72rem/1.2 var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+}
+.mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+/* Brettvelger */
+.picker { display: grid; gap: 14px; }
+.groups { display: flex; flex-wrap: wrap; gap: 18px 28px; }
+.group { display: grid; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: 500 0.85rem var(--font-data); padding: 6px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+}
+.chip[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 1px var(--fg); }
+.chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--dream); outline-offset: 2px; }
+
+/* Instrumentbordet */
+.bench { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 20px; }
+.panels { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-content: start; min-width: 0; }
+.panel canvas { width: 100%; max-width: 100%; aspect-ratio: 1; image-rendering: pixelated; border-radius: 4px; background: var(--board); display: block; }
+.panel.dream canvas { outline: 2px solid var(--dream); outline-offset: 2px; }
+.panel .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 8px; }
+.panel .head h2 { font-size: 1rem; }
+.panel.dream h2 { color: var(--dream); }
+.caption { font-size: 0.85rem; color: var(--muted); min-height: 2.6em; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button {
+  font: 500 0.75rem var(--font-body); padding: 4px 8px; border-radius: 5px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+}
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+.controls .row { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; min-width: 0; }
+.controls input[type="range"] { flex: 1; min-width: 0; accent-color: var(--fg); }
+.controls .dreamrow input[type="range"] { accent-color: var(--dream); }
+.btn {
+  font: 600 0.85rem var(--font-body); padding: 8px 14px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--fg); background: var(--fg); color: var(--surface);
+}
+.btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+.readout { font: 500 0.85rem var(--font-data); white-space: nowrap; }
+
+/* Filmstripe */
+.strip-wrap { display: grid; gap: 8px; }
+.strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
+.frame { flex: 0 0 auto; width: 72px; display: grid; gap: 4px; cursor: pointer; background: none; border: 0; padding: 0; color: var(--fg); text-align: left; }
+.frame canvas { width: 72px; height: 72px; image-rendering: pixelated; border-radius: 3px; display: block; outline: 2px solid transparent; outline-offset: 1px; }
+.frame[aria-pressed="true"] canvas { outline-color: var(--dream); }
+.frame .bars { display: grid; gap: 2px; }
+.frame .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.frame .bar i { display: block; height: 100%; }
+.frame .bar.g i { background: var(--good); }
+.frame .bar.o i { background: var(--bad); }
+.frame .real { font: 500 0.7rem var(--font-data); color: var(--muted); }
+.frame .real.goal { color: var(--good); }
+.frame .real.obstacle { color: var(--bad); }
+
+/* Valget */
+.lower { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { font: 500 0.72rem var(--font-body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+td { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+tr.chosen td { font-weight: 600; background: var(--bg); }
+tr.chosen td:first-child::after { content: "  valgt"; font: 500 0.7rem var(--font-body); color: var(--muted); }
+.meter { display: inline-block; width: 46px; height: 6px; background: var(--line); border-radius: 3px; vertical-align: middle; margin-left: 6px; overflow: hidden; }
+.meter i { display: block; height: 100%; }
+.notes { display: grid; gap: 10px; font-size: 0.9rem; color: var(--muted); align-content: start; }
+.notes strong { color: var(--fg); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+footer { font-size: 0.85rem; color: var(--muted); }
+footer a { color: var(--fg); }
+
+@media (max-width: 860px) {
+  .panels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lower { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) {
+  .bench { padding: 14px; }
+  .panels { gap: 12px; }
+}
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="label">World Models i GridDodge · steg 9</span>
+    <h1>Agentens drøm</h1>
+    <p>Agenten har aldri fått reglene for spillet. Den har lært en modell av verden fra bilder, og den ble trent inne i drømmene til den modellen. Her ser du hva den ser, hva den tror og hva den drømmer om i hvert skritt av ekte episoder.</p>
+    <p>Hvert skritt starter en ny drøm: modellen spår de neste ti bildene mens agenten velger handlinger i drømmen. Ved siden av ser du hva som faktisk skjer når de samme handlingene tas i det ekte spillet.</p>
+  </header>
+
+  <section class="picker" aria-label="Velg brett">
+    <div class="groups" id="groups"></div>
+    <div class="legend">
+      <span style="--c: var(--agent)">agent</span>
+      <span style="--c: var(--goal)">mål</span>
+      <span style="--c: var(--obstacle)">hindring</span>
+      <span style="--c: var(--dream)">drøm</span>
+    </div>
+  </section>
+
+  <section class="bench" aria-label="Episoden">
+    <div class="panels">
+      <div class="panel">
+        <div class="head"><h2>Virkeligheten</h2><span class="readout" id="realReadout"></span></div>
+        <canvas id="cReal" width="256" height="256" aria-label="Det ekte brettet"></canvas>
+        <p class="caption" id="realCaption"></p>
+      </div>
+      <div class="panel">
+        <div class="head"><h2>Det agenten ser</h2></div>
+        <canvas id="cSeen" width="256" height="256" aria-label="Bildet etter VAE-en, med agentens tro"></canvas>
+        <div class="seg" id="overlay" role="group" aria-label="Vis tro">
+          <button type="button" data-o="belief" aria-pressed="true">Filteret</button>
+          <button type="button" data-o="eye" aria-pressed="false">Øyet alene</button>
+          <button type="button" data-o="goal" aria-pressed="false">Målminnet</button>
+          <button type="button" data-o="none" aria-pressed="false">Bare bildet</button>
+        </div>
+        <p class="caption" id="seenCaption"></p>
+      </div>
+      <div class="panel dream">
+        <div class="head"><h2>Drømmen</h2><span class="readout" id="dreamReadout"></span></div>
+        <canvas id="cDream" width="256" height="256" aria-label="Drømmebildet"></canvas>
+        <p class="caption" id="dreamCaption"></p>
+      </div>
+      <div class="panel">
+        <div class="head"><h2>Samme handlinger, ekte</h2></div>
+        <canvas id="cCheck" width="256" height="256" aria-label="Det ekte brettet med drømmens handlinger"></canvas>
+        <p class="caption" id="checkCaption"></p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="play" type="button">Spill av</button>
+      <div class="row">
+        <label class="label" for="step">Skritt</label>
+        <input type="range" id="step" min="0" max="0" value="0">
+        <span class="readout" id="stepOut"></span>
+      </div>
+      <div class="row dreamrow">
+        <label class="label" for="dstep">Drøm</label>
+        <input type="range" id="dstep" min="0" max="0" value="0">
+        <span class="readout" id="dstepOut"></span>
+      </div>
+    </div>
+
+    <div class="strip-wrap">
+      <span class="label">Drømmen fra dette skrittet, bilde for bilde</span>
+      <div class="strip" id="strip"></div>
+      <div class="legend">
+        <span style="--c: var(--good)">sannsynlighet for mål i drømmen</span>
+        <span style="--c: var(--bad)">sannsynlighet for krasj i drømmen</span>
+        <span style="--c: transparent">teksten under: hva som skjedde i det ekte spillet</span>
+      </div>
+    </div>
+
+    <div class="lower">
+      <div>
+        <span class="label">Hva controlleren veier i dette skrittet</span>
+        <div style="overflow-x:auto">
+          <table aria-label="Controllerens valg">
+            <thead><tr><th>Handling</th><th>Krasjrisiko</th><th>Nylig besøkt</th><th>Skår</th></tr></thead>
+            <tbody id="choice"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="notes">
+        <p><strong>Krasjrisiko</strong> er modellens fremsyn: hvor sannsynlig det er å treffe en hindring med hver handling, lest fra bildet.</p>
+        <p><strong>Nylig besøkt</strong> sier hvor mye agenten har vært i cellen handlingen fører til. Å gå tilbake eller inn i veggen gir et høyt tall. Det er dette som stoppet pendlingen i steg 8.</p>
+        <p><strong>Skåren</strong> er en lineær sum av det agenten ser og tror. Høyest skår vinner.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>Bygd med <code>python -m worldmodels.dreamview</code>. Kode, beslutningslogg og evaluering: <a href="https://github.com/trowangotang/world-models">github.com/trowangotang/world-models</a>.</footer>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+const ARROWS = ["↑ opp", "↓ ned", "← venstre", "→ høyre"];
+const SHORT = ["↑", "↓", "←", "→"];
+const EVENT = { move: "flyttet seg", goal: "nådde målet", obstacle: "krasjet" };
+const N = 8;
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const state = { b: 0, t: 0, k: 0, overlay: "belief", timer: null };
+const sheets = DATA.boards.map((b) => { const img = new Image(); img.src = b.sheet; return img; });
+const $ = (id) => document.getElementById(id);
+
+function board() { return DATA.boards[state.b]; }
+function step() { return board().steps[state.t]; }
+
+// ---------- tegning
+function drawBoard(ctx, b, pos, path, ended) {
+  const W = ctx.canvas.width, c = W / N;
+  ctx.fillStyle = css("--board"); ctx.fillRect(0, 0, W, W);
+  ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
+  for (let i = 1; i < N; i++) {
+    ctx.beginPath(); ctx.moveTo(i * c + 0.5, 0); ctx.lineTo(i * c + 0.5, W); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i * c + 0.5); ctx.lineTo(W, i * c + 0.5); ctx.stroke();
+  }
+  ctx.fillStyle = css("--obstacle");
+  for (const [r, q] of b.obstacles) ctx.fillRect(q * c, r * c, c, c);
+  ctx.fillStyle = css("--goal"); ctx.fillRect(b.goal[1] * c, b.goal[0] * c, c, c);
+  if (path && path.length > 1) {
+    ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 3; ctx.lineJoin = "round";
+    ctx.beginPath();
+    path.forEach(([r, q], i) => { const x = q * c + c / 2, y = r * c + c / 2; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+  }
+  if (pos) {
+    const m = c / 8;
+    ctx.fillStyle = css("--agent"); ctx.fillRect(pos[1] * c + m, pos[0] * c + m, c - 2 * m, c - 2 * m);
+    if (ended) {
+      ctx.strokeStyle = ended === "goal" ? "#ffffff" : css("--obstacle"); ctx.lineWidth = 3;
+      ctx.strokeRect(pos[1] * c + 2, pos[0] * c + 2, c - 4, c - 4);
+    }
+  }
+}
+
+function drawSprite(ctx, b, i) {
+  const W = ctx.canvas.width, img = sheets[b];
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = css("--board"); ctx.fillRect(0, 0, W, W);
+  if (img.complete) ctx.drawImage(img, 0, i * 64, 64, 64, 0, 0, W, W);
+}
+
+function drawHeat(ctx, values, rgb) {
+  const W = ctx.canvas.width, c = W / N;
+  let best = 0;
+  values.forEach((v, i) => {
+    if (v > values[best]) best = i;
+    if (v < 2) return;
+    ctx.fillStyle = `rgba(${rgb}, ${Math.min(0.75, 0.15 + v / 100 * 0.7)})`;
+    ctx.fillRect((i % N) * c, Math.floor(i / N) * c, c, c);
+  });
+  ctx.strokeStyle = `rgb(${rgb})`; ctx.lineWidth = 3;
+  ctx.strokeRect((best % N) * c + 1.5, Math.floor(best / N) * c + 1.5, c - 3, c - 3);
+  return [Math.floor(best / N), best % N, values[best]];
+}
+
+const pct = (x) => `${Math.round(x * 100)} %`;
+const cell = ([r, c]) => `(${r}, ${c})`;
+
+// ---------- visning
+function render() {
+  const b = board(), s = step(), d = s.dream[state.k];
+  const path = b.steps.slice(0, state.t + 1).map((x) => x.pos);
+  const last = state.t === b.steps.length - 1;
+
+  drawBoard($("cReal").getContext("2d"), b, s.pos, path, null);
+  $("realReadout").textContent = `seed ${b.seed}`;
+  $("realCaption").textContent = `Agenten står i ${cell(s.pos)} og velger ${ARROWS[s.action]}. Da ${EVENT[s.event]} den${last ? ", og episoden er over." : "."}`;
+
+  const sctx = $("cSeen").getContext("2d");
+  drawSprite(sctx, state.b, s.recon);
+  let caption = "Bildet etter at det er komprimert til 32 tall og tegnet opp igjen av VAE-en.";
+  if (state.overlay === "belief") {
+    const [r, q, v] = drawHeat(sctx, s.belief, "120, 200, 255");
+    caption = `Filteret tror agenten står i ${cell([r, q])} (${v} %). Det bruker både bildet og handlingen agenten nettopp tok.`;
+  } else if (state.overlay === "eye") {
+    const [r, q, v] = drawHeat(sctx, s.eye, "255, 210, 90");
+    const right = r === s.pos[0] && q === s.pos[1];
+    caption = `Øyet alene ser agenten i ${cell([r, q])} (${v} %)${right ? "." : ", men den står i " + cell(s.pos) + "."}`;
+  } else if (state.overlay === "goal") {
+    const [r, q, v] = drawHeat(sctx, s.goal, "90, 230, 130");
+    caption = `Målminnet samler alle bildene så langt og tror målet står i ${cell([r, q])} (${v} %).`;
+  }
+  $("seenCaption").textContent = caption;
+
+  const dctx = $("cDream").getContext("2d");
+  const cctx = $("cCheck").getContext("2d");
+  if (d) {
+    drawSprite(dctx, state.b, d.f);
+    $("dreamReadout").textContent = `${state.k + 1} av ${s.dream.length}`;
+    const before = state.k === 0 ? 1 : s.dream[state.k - 1].alive;
+    $("dreamCaption").textContent = `Agenten går ${ARROWS[d.a]} i drømmen. Modellen gir ${pct(d.pg)} for mål og ${pct(d.po)} for krasj i dette skrittet` +
+      (before < 0.5 ? ", men drømmen er nesten over allerede." : ".");
+    const realPath = [s.pos, ...s.dream.slice(0, state.k + 1).map((x) => x.rp).filter(Boolean)];
+    const lastReal = realPath[realPath.length - 1];
+    const ended = s.dream.slice(0, state.k + 1).map((x) => x.re).find((e) => e === "goal" || e === "obstacle");
+    drawBoard(cctx, b, lastReal, realPath, ended);
+    $("checkCaption").textContent = d.re ? `I det ekte spillet ${EVENT[d.re]} agenten med samme handling.` :
+      `Episoden var allerede over i det ekte spillet (${EVENT[ended] || "avkortet"}).`;
+  }
+  $("stepOut").textContent = `${state.t + 1}/${b.steps.length}`;
+  $("dstepOut").textContent = `${state.k + 1}/${s.dream.length}`;
+  $("step").value = state.t; $("dstep").value = state.k;
+  $("dstep").max = s.dream.length - 1;
+  renderStrip(); renderChoice();
+}
+
+function renderStrip() {
+  const s = step(), strip = $("strip");
+  if (strip.dataset.key !== `${state.b}-${state.t}`) {
+    strip.dataset.key = `${state.b}-${state.t}`;
+    strip.innerHTML = "";
+    s.dream.forEach((d, k) => {
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "frame"; btn.dataset.k = k;
+      btn.setAttribute("aria-label", `Drømmeskritt ${k + 1}`);
+      const cv = document.createElement("canvas"); cv.width = 64; cv.height = 64;
+      drawSprite(cv.getContext("2d"), state.b, d.f);
+      const re = d.re || "over";
+      btn.innerHTML = `<div class="bars"><div class="bar g"><i style="width:${d.pg * 100}%"></i></div><div class="bar o"><i style="width:${d.po * 100}%"></i></div></div>` +
+        `<span class="real ${re}">${SHORT[d.a]} ${re === "goal" ? "mål" : re === "obstacle" ? "krasj" : re === "over" ? "over" : "ok"}</span>`;
+      btn.prepend(cv);
+      btn.addEventListener("click", () => { stop(); state.k = k; render(); });
+      strip.appendChild(btn);
+    });
+  }
+  strip.querySelectorAll(".frame").forEach((el) => el.setAttribute("aria-pressed", String(+el.dataset.k === state.k)));
+}
+
+function renderChoice() {
+  const s = step();
+  $("choice").innerHTML = ARROWS.map((name, a) => `
+    <tr class="${a === s.action ? "chosen" : ""}">
+      <td>${name}</td>
+      <td>${s.look[a]} %<span class="meter"><i style="width:${s.look[a]}%;background:var(--bad)"></i></span></td>
+      <td>${s.visits[a]} %<span class="meter"><i style="width:${Math.min(100, s.visits[a])}%;background:var(--dream)"></i></span></td>
+      <td>${s.logits[a].toFixed(2)}</td>
+    </tr>`).join("");
+}
+
+// ---------- brettvelger
+function buildPicker() {
+  const groups = $("groups");
+  DATA.categories.forEach((cat) => {
+    const items = DATA.boards.map((b, i) => [b, i]).filter(([b]) => b.category === cat.key);
+    if (!items.length) return;
+    const g = document.createElement("div"); g.className = "group";
+    g.innerHTML = `<span class="label">${cat.title}</span>`;
+    const chips = document.createElement("div"); chips.className = "chips";
+    items.forEach(([b, i]) => {
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "chip"; btn.dataset.i = i;
+      const color = b.outcome === "goal" ? "var(--good)" : b.outcome === "obstacle" ? "var(--bad)" : "var(--muted)";
+      btn.innerHTML = `<span class="dot" style="background:${color}"></span>${b.seed}`;
+      btn.setAttribute("aria-label", `Brett ${b.seed}, ${b.steps.length} skritt, ${EVENT[b.outcome] || "avkortet"}`);
+      btn.addEventListener("click", () => selectBoard(i));
+      chips.appendChild(btn);
+    });
+    g.appendChild(chips); groups.appendChild(g);
+  });
+}
+
+function selectBoard(i) {
+  stop();
+  state.b = i; state.t = 0; state.k = 0;
+  $("step").max = board().steps.length - 1;
+  document.querySelectorAll(".chip").forEach((el) => el.setAttribute("aria-pressed", String(+el.dataset.i === i)));
+  render();
+}
+
+// ---------- avspilling: hver drøm spilles ferdig, så tar agenten neste ekte skritt
+const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function tick() {
+  const s = step();
+  if (state.k < s.dream.length - 1) state.k++;
+  else if (state.t < board().steps.length - 1) { state.t++; state.k = 0; }
+  else { stop(); return; }
+  render();
+}
+function play() {
+  if (state.timer) { stop(); return; }
+  if (state.t === board().steps.length - 1 && state.k === step().dream.length - 1) { state.t = 0; state.k = 0; }
+  state.timer = setInterval(tick, reduced ? 900 : 450);
+  $("play").textContent = "Pause";
+}
+function stop() { clearInterval(state.timer); state.timer = null; $("play").textContent = "Spill av"; }
+
+$("play").addEventListener("click", play);
+$("step").addEventListener("input", (e) => { stop(); state.t = +e.target.value; state.k = 0; render(); });
+$("dstep").addEventListener("input", (e) => { stop(); state.k = +e.target.value; render(); });
+$("overlay").addEventListener("click", (e) => {
+  const o = e.target.closest("button")?.dataset.o; if (!o) return;
+  state.overlay = o;
+  document.querySelectorAll("#overlay button").forEach((el) => el.setAttribute("aria-pressed", String(el.dataset.o === o)));
+  render();
+});
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+buildPicker();
+let loaded = 0;
+sheets.forEach((img) => img.addEventListener("load", () => { if (++loaded === sheets.length) { $("strip").dataset.key = ""; render(); } }));
+selectBoard(0);
+</script>
