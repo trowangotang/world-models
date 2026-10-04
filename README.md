@@ -40,6 +40,7 @@ hvert steg bygges, testes og godkjennes før neste, og viktige valg logges i
 | 9. Vis drømmen | `worldmodels/dreamview` | ✅ [interaktiv side](docs/drom/index.html) med drøm og virkelighet side om side |
 | 10. Bevegelige hindringer | `worldmodels/env`, `worldmodels/mdnrnn/neighbours.py` | ✅ når målet i 83 % (steg 8: 79 %), drømmen er ærlig om krasj |
 | 11. Øyet leser hindringene | `worldmodels/mdnrnn/obstacles.py` | ✅ når målet i 90 % med bevegelige hindringer, uten ny controller-trening |
+| 12. Drømmesiden, bevegelig | `worldmodels/dreamview` | ✅ [siden](docs/drom/index.html) viser hindringskartet og hvor M tror hindringene går |
 
 ## Miljøet: GridDodge
 
@@ -214,8 +215,10 @@ python -m worldmodels.controller.train --rnn checkpoints/mdnrnn_sense.pt --data 
 ### Steg 9: vis drømmen
 
 ```bash
-# Tar opp 11 brett med sluttagenten og skriver én selvstendig HTML-fil (~1 min, ~0,7 MB)
-python -m worldmodels.dreamview --out docs/drom/index.html
+# Tar opp 11 brett med sluttagenten og skriver én selvstendig HTML-fil (~1 min, ~0,7 MB).
+# Fra steg 12 er standard den bevegelige verdenen; dette gir siden fra steg 9:
+python -m worldmodels.dreamview --moving 0 --rnn mdnrnn_sense.pt --controller controller_track.npz \
+    --previous-rnn mdnrnn_sense.pt --previous controller_sense.npz --previous-name "Steg 7" --out docs/drom/index.html
 ```
 
 ### Steg 10: bevegelige hindringer
@@ -252,6 +255,13 @@ python -m worldmodels.mdnrnn.obstacles --rnn checkpoints/mdnrnn_moving.pt --data
     --out checkpoints/mdnrnn_obstacles.pt
 # Ingen ny controller: steg 10-controlleren bruker den nye M direkte. Evaluering som i steg 10.
 python -m worldmodels.evaluation --moving 3 --out docs/evaluation_moving
+```
+
+### Steg 12: drømmesiden i den bevegelige verdenen
+
+```bash
+# Sluttagenten fra steg 11 med tre bevegelige hindringer (~30 s, ~1,3 MB)
+python -m worldmodels.dreamview --out docs/drom/index.html
 ```
 
 ## Resultater fra steg 2
@@ -586,6 +596,21 @@ Det tar ett minutt å trene, og controlleren fra steg 10 brukes som den er:
   verdensmodell gjorde agenten bedre med en gang.
 - **Det som gjenstår:** krasj i første skritt, før noen kan se hvor hindringene går, og en drøm som
   nå overdriver krasjfaren (lover 9 %, 4 % skjer). Se D70–D72.
+
+## Steg 12: drømmesiden i den bevegelige verdenen
+
+[`docs/drom/index.html`](docs/drom/index.html) viser nå sluttagenten fra steg 11 med tre bevegelige
+hindringer. Nytt på siden:
+
+- **Hindringene flytter seg** i virkeligheten, og en stiplet ramme viser hvor hver hindring står om
+  ett skritt.
+- **"Hindringene"** i "Det agenten ser" viser kartet øyet leser fra bildet (rødt) og cellene M tror en
+  hindring flytter seg inn i (lilla ramme), med hvor mange av dem som var riktige.
+- **Brettene** er valgt blant dem steg 10 krasjet på og steg 11 klarte, omveier, rett fram, og to
+  krasj: ett i første skritt, før noen kan se bevegelsen, og ett senere.
+
+På de 11 brettene spådde M 79 % av cellene en hindring flyttet seg inn i, og 95 % av spådommene var
+riktige. Se D73.
 
 ## Prosjektstruktur
 

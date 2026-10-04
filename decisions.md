@@ -889,3 +889,25 @@ er altså en bedre verdensmodell, ikke en ny agent.
   uskarpt utover i drømmen, ser hindringene ut til å være flere steder.
 - **Det som gjenstår:** krasj i de første skrittene, og at drømmen overdriver krasjfaren. Det siste
   kan bety at en controller trent helt i den nye drømmen blir for redd.
+
+## Steg 12: drømmesiden i den bevegelige verdenen
+
+Martin valgte "Oppdater drømmesiden" som neste steg.
+
+### D73. Siden viser sluttagenten fra steg 11 med bevegelige hindringer
+`python -m worldmodels.dreamview` bruker nå standard steg 11-modellen og tre bevegelige hindringer.
+`--moving 0` og sjekkpunktene fra steg 8 gir fortsatt siden fra steg 9.
+
+- **Hindringene tegnes for hvert skritt**, både i virkeligheten og i "samme handlinger, ekte". Der en
+  hindring står om ett skritt, men ikke nå, er det en stiplet ramme, så man ser hvor de går.
+- **Nytt valg "Hindringene"** (standard) i "Det agenten ser": rødt der hindringsøyet ser en hindring,
+  lilla ramme der M tror en hindring kommer i neste skritt. Teksten sier hvor mange av dem som var
+  riktige, sammenlignet med fasiten.
+- **Brettene** velges som før, de første i seed-rekkefølge per gruppe. Gruppene er nå 4 brett der
+  steg 10 krasjet og steg 11 kom frem (samme controller, bare nytt øye), 3 omveier, 2 rett fram,
+  1 krasj i første skritt og 1 krasj senere. Krasj i første skritt er den svakheten som gjenstår (D72),
+  så den får sin egen gruppe.
+- På de 11 brettene (76 skritt) var øyets kart helt riktig i 65 skritt. Av de 220 cellene en hindring
+  flyttet seg inn i, spådde M 173 (79 %), og 173 av de 182 cellene den spådde var riktige (95 %).
+  Dette er et lite utvalg, så bare en pekepinn.
+- Filen er 1,3 MB (0,7 før), fordi hvert skritt nå har to kart til.

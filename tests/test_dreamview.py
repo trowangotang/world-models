@@ -44,3 +44,30 @@ def test_board_json_indexes_every_frame_in_the_sheet():
     frames = [s["recon"] for s in data["steps"]] + [d["f"] for s in data["steps"] for d in s["dream"]]
     assert sorted(frames) == list(range(len(frames))) and height == 64 * len(frames)
     assert "/*DATA*/null" in TEMPLATE.read_text()
+
+
+def test_moving_world_records_obstacles_and_maps_each_step():
+    from worldmodels.env import GridConfig
+
+    torch.manual_seed(0)
+    vae = ConvVAE(VAEConfig(latent_dim=4, base_channels=8)).eval()
+    rnn = MDNRNN(MDNRNNConfig(latent_dim=4, hidden_dim=8, num_mixtures=2, eye=True, eye_channels=4,
+                              neighbours=True, neighbour_channels=4, obstacle_eye=True, obstacle_channels=4)).eval()
+    c = LinearController(4, 8, extra_dim=12, lookahead=True, sight=True, track=True)
+    c.params = np.random.default_rng(0).normal(size=c.num_params).astype(np.float32)
+    rec = record_episode(vae, rnn, c, seed=3, horizon=2, config=GridConfig(moving_obstacles=3))
+    for s in rec.steps:
+        assert len(s.obstacles) == 6 and len(s.next_obstacles) == 6
+        assert s.obstacle_map.shape == (64,) and s.obstacle_next.shape == (64,)
+        assert s.dream[0].real_obstacles is not None
+    # Hindringene i neste skritt er de som står der i skrittet etter
+    for a, b in zip(rec.steps, rec.steps[1:]):
+        assert a.next_obstacles == b.obstacles
+    data = board_json(rec, "fixed")
+    assert len(data["steps"][0]["omap"]) == 64 and data["steps"][0]["dream"][0]["ro"]
+
+
+def test_still_world_has_no_obstacle_maps():
+    vae, rnn, c = tiny_world()
+    data = board_json(record_episode(vae, rnn, c, seed=5, horizon=2), "crash")
+    assert data["steps"][0]["omap"] is None and data["steps"][0]["obs"] == data["obstacles"]

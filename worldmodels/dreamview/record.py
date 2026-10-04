@@ -11,6 +11,9 @@ For hvert skritt t i en ekte episode lagrer vi:
   * virkeligheten for de samme handlingene: en kopi av miljøet tar handlingene drømmen valgte, så
     drøm og virkelighet kan sammenlignes skritt for skritt.
 
+Med bevegelige hindringer (steg 12) lagres også hvor hindringene står i hvert skritt, og med
+hindringsøye (steg 11) kartet øyet leser og kartet M spår for neste skritt.
+
 Den ekte verden er så enkel at den tegnes i nettleseren fra posisjonene. Bare bildene som kommer
 fra modellene (V sin rekonstruksjon og drømmen) lagres som bilder.
 """
@@ -26,7 +29,7 @@ import torch.nn.functional as F
 
 from worldmodels.controller.features import world_features
 from worldmodels.controller.policy import LinearController
-from worldmodels.env import GridDodgeEnv
+from worldmodels.env import GridConfig, GridDodgeEnv
 from worldmodels.mdnrnn.encode import EVENT_GOAL, EVENT_MOVE, EVENT_OBSTACLE
 from worldmodels.mdnrnn.model import MDNRNN, most_likely_mean
 from worldmodels.vae.dataset import to_tensor
@@ -46,6 +49,7 @@ class DreamStep:
     agent_belief: np.ndarray  # (64,) hva controlleren trodde om agentcellen før handlingen
     real_pos: tuple[int, int] | None   # hvor agenten faktisk havnet med samme handling (None: allerede over)
     real_event: str | None             # "move", "goal", "obstacle" eller None
+    real_obstacles: list[tuple[int, int]] | None = None   # hindringene etter skrittet i virkeligheten
 
 
 @dataclass
@@ -61,6 +65,10 @@ class RealStep:
     action: int
     event: str                # hva som skjedde da handlingen ble tatt
     dream: list[DreamStep] = field(default_factory=list)
+    obstacles: list[tuple[int, int]] = field(default_factory=list)       # der hindringene står nå
+    next_obstacles: list[tuple[int, int]] = field(default_factory=list)  # der de står etter skrittet
+    obstacle_map: np.ndarray | None = None    # (64,) hindringsøyets kart for dette bildet
+    obstacle_next: np.ndarray | None = None   # (64,) kartet M spår for neste skritt
 
 
 @dataclass
@@ -71,6 +79,10 @@ class EpisodeRecord:
     steps: list[RealStep]
     outcome: str
     final_pos: tuple[int, int]   # der agenten stod da episoden sluttet
+
+
+def cells(positions) -> list[tuple[int, int]]:
+    return sorted(tuple(int(x) for x in p) for p in positions)
 
 
 def to_uint8(img: torch.Tensor) -> np.ndarray:
@@ -96,14 +108,15 @@ def dream_from(vae, rnn, controller, z, hidden, memory, env, horizon: int) -> li
         memory = memory.moved(a)
         hidden = out.hidden
         z = most_likely_mean(out)[:, 0]
-        real_pos = real_event = None
+        real_pos = real_event = real_obstacles = None
         if not real._done:
             _, _, _, _, info = real.step(int(a))
             real_pos, real_event = tuple(int(x) for x in real.agent_pos), info["event"]
+            real_obstacles = cells(real.obstacles)
         out_steps.append(DreamStep(
             action=int(a), p_goal=float(p[EVENT_GOAL]), p_obstacle=float(p[EVENT_OBSTACLE]),
             alive=alive * float(p[EVENT_MOVE]), frame=to_uint8(vae.decode(z)[0]),
-            agent_belief=belief, real_pos=real_pos, real_event=real_event,
+            agent_belief=belief, real_pos=real_pos, real_event=real_event, real_obstacles=real_obstacles,
         ))
         alive *= float(p[EVENT_MOVE])
         if alive < MIN_ALIVE and real._done:
@@ -112,10 +125,11 @@ def dream_from(vae, rnn, controller, z, hidden, memory, env, horizon: int) -> li
 
 
 @torch.no_grad()
-def record_episode(vae: ConvVAE, rnn: MDNRNN, controller: LinearController, seed: int, horizon: int = 10) -> EpisodeRecord:
+def record_episode(vae: ConvVAE, rnn: MDNRNN, controller: LinearController, seed: int, horizon: int = 10,
+                   config: GridConfig | None = None) -> EpisodeRecord:
     """Spill én ekte episode med agenten og ta opp alt (se modulens beskrivelse)."""
     vae, rnn = vae.eval(), rnn.eval()
-    env = GridDodgeEnv()
+    env = GridDodgeEnv(config)
     obs = env.reset(seed=seed)
     H = rnn.config.hidden_dim
     hidden = (torch.zeros(1, 1, H), torch.zeros(1, 1, H))
@@ -130,6 +144,9 @@ def record_episode(vae: ConvVAE, rnn: MDNRNN, controller: LinearController, seed
         logits = controller.logits(z, hidden[0][-1], extra)[0]
         a = int(logits.argmax())
         k = 4 if controller.sight else 0
+        maps = None
+        if rnn.obstacle_eye is not None:
+            maps = [m[0].numpy() for m in rnn.obstacle_maps(z, memory.obstacles_before)]
         steps.append(RealStep(
             pos=tuple(int(x) for x in env.agent_pos), recon=to_uint8(vae.decode(z)[0]),
             eye_agent=F.softmax(rnn.eye(z)[0, 0], -1).numpy(), agent_belief=memory.agent[0].numpy().copy(),
@@ -137,6 +154,8 @@ def record_episode(vae: ConvVAE, rnn: MDNRNN, controller: LinearController, seed
             lookahead=extra[0, k:k + 4].numpy() if controller.lookahead else np.zeros(4),
             visits=extra[0, k + 4:k + 8].numpy() if controller.track else np.zeros(4),
             logits=logits.numpy(), action=a, event="move", dream=dream,
+            obstacles=cells(env.obstacles), next_obstacles=cells(env.next_obstacles()),
+            obstacle_map=None if maps is None else maps[0], obstacle_next=None if maps is None else maps[1],
         ))
         hidden = rnn(z.unsqueeze(1), torch.tensor([[a]]), hidden).hidden
         memory = memory.moved(torch.tensor([a]))
@@ -145,5 +164,5 @@ def record_episode(vae: ConvVAE, rnn: MDNRNN, controller: LinearController, seed
         if terminated:
             outcome = info["event"]
     return EpisodeRecord(seed=seed, goal=tuple(int(x) for x in env.goal_pos),
-                         obstacles=sorted(tuple(int(x) for x in o) for o in env.obstacles), steps=steps, outcome=outcome,
+                         obstacles=steps[0].obstacles, steps=steps, outcome=outcome,
                          final_pos=tuple(int(x) for x in env.agent_pos))
