@@ -7,6 +7,10 @@ Hver episode lagres som én komprimert .npz-fil:
     terminated  (T,)           bool    True på skrittet der agenten traff mål/hindring
     truncated   (T,)           bool    True hvis episoden ble avkortet av max_steps
 
+I førsteperson (steg 14) lagres i tillegg fasiten for hvert bilde, til etiketter og figurer:
+    topdown     (T+1, H, W, 3) uint8   verden sett ovenfra
+    heading     (T+1,)         int64   retningen agenten ser, indeks i ACTIONS
+
 Overgang t er (obs[t], actions[t], obs[t+1]). Vi lagrer altså ikke "neste
 observasjon" som en egen kopi; den er bare obs forskjøvet ett hakk. Det halverer
 lagringsbehovet, og sekvensformen er akkurat det MDN-RNN-en trenger i steg 3.
@@ -56,6 +60,8 @@ class Episode:
     rewards: np.ndarray
     terminated: np.ndarray
     truncated: np.ndarray
+    topdown: np.ndarray | None = None
+    heading: np.ndarray | None = None
 
     def __len__(self) -> int:
         return len(self.actions)
@@ -70,17 +76,24 @@ class Episode:
         assert self.obs.shape[0] == T + 1, "obs må ha én rad mer enn actions"
         assert self.rewards.shape == (T,) and self.terminated.shape == (T,) and self.truncated.shape == (T,)
         assert self.obs.dtype == np.uint8
+        if self.topdown is not None:
+            assert self.topdown.shape == self.obs.shape and self.heading.shape == (T + 1,)
 
 
 def run_episode(env: GridDodgeEnv, policy: RandomPolicy, seed: int | None = None) -> Episode:
     obs = env.reset(seed=seed)
     policy.reset()
+    fp = env.config.first_person
     frames, actions, rewards, terms, truncs = [obs], [], [], [], []
+    tops, headings = ([env.render_topdown()], [env.heading]) if fp else (None, None)
     done = False
     while not done:
         a = policy.act(obs)
         obs, r, terminated, truncated, _ = env.step(a)
         frames.append(obs)
+        if fp:
+            tops.append(env.render_topdown())
+            headings.append(env.heading)
         actions.append(a)
         rewards.append(r)
         terms.append(terminated)
@@ -92,11 +105,14 @@ def run_episode(env: GridDodgeEnv, policy: RandomPolicy, seed: int | None = None
         rewards=np.asarray(rewards, dtype=np.float32),
         terminated=np.asarray(terms, dtype=bool),
         truncated=np.asarray(truncs, dtype=bool),
+        topdown=np.stack(tops).astype(np.uint8) if fp else None,
+        heading=np.asarray(headings, dtype=np.int64) if fp else None,
     )
 
 
 def save_episode(episode: Episode, path: str | Path) -> None:
     episode.validate()
+    extra = {} if episode.topdown is None else {"topdown": episode.topdown, "heading": episode.heading}
     np.savez_compressed(
         path,
         obs=episode.obs,
@@ -104,12 +120,14 @@ def save_episode(episode: Episode, path: str | Path) -> None:
         rewards=episode.rewards,
         terminated=episode.terminated,
         truncated=episode.truncated,
+        **extra,
     )
 
 
 def load_episode(path: str | Path) -> Episode:
     with np.load(path) as d:
-        ep = Episode(**{k: d[k] for k in ("obs", "actions", "rewards", "terminated", "truncated")})
+        ep = Episode(**{k: d[k] for k in ("obs", "actions", "rewards", "terminated", "truncated", "topdown", "heading")
+                        if k in d.files})
     ep.validate()
     return ep
 
@@ -161,9 +179,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--episodes", type=int, default=1000)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--repeat-prob", type=float, default=0.5, help="sannsynlighet for å gjenta forrige handling")
+    p.add_argument("--moving", type=int, default=0, help="så mange av hindringene beveger seg")
+    p.add_argument("--first-person", action="store_true", help="agenten ser verden i førsteperson (steg 14)")
     args = p.parse_args(argv)
 
-    stats = collect_rollouts(args.out, args.episodes, seed=args.seed, repeat_prob=args.repeat_prob)
+    config = GridConfig(moving_obstacles=args.moving, first_person=args.first_person)
+    stats = collect_rollouts(args.out, args.episodes, seed=args.seed, config=config, repeat_prob=args.repeat_prob)
     o = stats["outcomes"]
     print(
         f"Lagret {stats['episodes']} episoder / {stats['transitions']} overganger i {args.out}\n"
