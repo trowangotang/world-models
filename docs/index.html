@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>World Models i GridDodge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --fg: #1b1b24; --muted: #5d5d6c; --line: #dcdad2;
+  --board: #13131c; --agent: #3f7be6; --goal: #2fa84f; --wall: #d93a3a; --dream: #7b5bd6;
+  --accent: #3f7be6; --chip: #ecebe5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101018; --panel: #181823; --fg: #ececf2; --muted: #a2a2b4; --line: #2c2c3a;
+    --board: #0b0b12; --agent: #6b9cf5; --goal: #4cc46c; --wall: #ec5a5a; --dream: #a48af0;
+    --accent: #6b9cf5; --chip: #22222f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101018; --panel: #181823; --fg: #ececf2; --muted: #a2a2b4; --line: #2c2c3a;
+  --board: #0b0b12; --agent: #6b9cf5; --goal: #4cc46c; --wall: #ec5a5a; --dream: #a48af0;
+  --accent: #6b9cf5; --chip: #22222f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.6 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 16px; padding-block: 40px 64px; }
+h1, h2, h3 { font-family: "Newsreader", Georgia, "Times New Roman", serif; font-weight: 600; text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.2rem); }
+h2 { font-size: 1.75rem; }
+h3 { font-size: 1.2rem; }
+p { margin: 0; max-width: 65ch; }
+a { color: var(--accent); }
+.mono, .num { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.label { font: 500 0.72rem/1.2 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 20px; margin-top: 64px; }
+img { max-width: 100%; height: auto; display: block; }
+.pix { image-rendering: pixelated; border-radius: 6px; background: var(--board); }
+figure { margin: 0; display: grid; gap: 8px; }
+.crop { aspect-ratio: 1044 / 522; width: 100%; object-fit: cover; object-position: top; }
+figcaption { font-size: 0.86rem; color: var(--muted); max-width: 70ch; }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 40px; align-items: center; }
+.hero .lede { font-size: 1.12rem; color: var(--muted); margin-top: 16px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 18px; font-size: 0.88rem; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.scores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+.score { border-left: 3px solid var(--c); padding: 4px 0 4px 14px; }
+.score .big { font: 500 2.4rem/1 "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.score p { font-size: 0.88rem; color: var(--muted); }
+.links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+.btn { display: inline-block; padding: 9px 16px; border-radius: 6px; border: 1px solid var(--line); text-decoration: none; color: var(--fg); background: var(--panel); font-weight: 500; font-size: 0.95rem; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* V M C */
+.vmc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.part { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: grid; gap: 8px; align-content: start; }
+.part .letter { font: 600 2rem/1 "Newsreader", Georgia, serif; color: var(--c); }
+.part p { font-size: 0.94rem; color: var(--muted); }
+
+/* Chart */
+.chart { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 620px; height: auto; }
+.chart text { font-family: "IBM Plex Mono", ui-monospace, monospace; fill: var(--muted); font-size: 12px; }
+.chart .val { fill: var(--fg); font-size: 11.5px; }
+
+/* Timeline */
+.steps { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 8px; }
+.step { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: 24px; padding: 0 0 40px 28px; }
+.step::before { content: ""; position: absolute; left: -7px; top: 6px; width: 12px; height: 12px; border-radius: 3px; background: var(--c, var(--muted)); }
+.step .text { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.step .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.step .tag { font: 500 0.78rem/1 "IBM Plex Mono", monospace; color: var(--muted); }
+.step .result { font: 500 0.88rem/1.4 "IBM Plex Mono", monospace; background: var(--chip); border-radius: 4px; padding: 4px 8px; justify-self: start; font-variant-numeric: tabular-nums; }
+.step .lesson { font-size: 0.94rem; color: var(--muted); }
+.step.world::before { border-radius: 50%; }
+.era { padding: 0 0 24px 28px; }
+.era .label { color: var(--fg); }
+
+.closing { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.closing ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 60ch; }
+footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 0.86rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px 24px; }
+
+@media (max-width: 760px) {
+  .wrap { padding-block: 24px 48px; }
+  .hero, .closing { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .vmc { grid-template-columns: minmax(0, 1fr); }
+  .step { grid-template-columns: minmax(0, 1fr); gap: 14px; padding-left: 20px; }
+  .era { padding-left: 20px; }
+  .score .big { font-size: 2rem; }
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header class="hero">
+  <div>
+    <div class="label">World Models · et hobbyprosjekt i 13 steg</div>
+    <h1 style="margin-top:10px">En agent som lærer å spille i sin egen drøm</h1>
+    <p class="lede">Agenten ser et lite rutenett som et bilde på 64×64 piksler. Den lærer først hvordan verden
+      oppfører seg, og deretter lærer den å spille nesten bare inne i den lærte modellen, i «drømmen».
+      Etter Ha &amp; Schmidhuber (2018), men med egne valg underveis.</p>
+    <div class="legend">
+      <span style="--c: var(--agent)">agenten</span>
+      <span style="--c: var(--goal)">målet</span>
+      <span style="--c: var(--wall)">hindringer</span>
+    </div>
+    <div class="scores">
+      <div class="score" style="--c: var(--goal)">
+        <div class="big">93 %</div>
+        <p>når målet med stille hindringer (tilfeldig: 13 %)</p>
+      </div>
+      <div class="score" style="--c: var(--wall)">
+        <div class="big">90 %</div>
+        <p>når målet når tre av hindringene beveger seg (tilfeldig: 10 %)</p>
+      </div>
+    </div>
+    <div class="links">
+      <a class="btn primary" href="drom/index.html">Se drømmen</a>
+      <a class="btn" href="https://github.com/trowangotang/world-models">Koden på GitHub</a>
+      <a class="btn" href="https://github.com/trowangotang/world-models/blob/main/decisions.md">Alle valgene</a>
+    </div>
+  </div>
+  <figure>
+    <img class="pix crop" src="evaluation_moving/final_paths.png" alt="Sluttagentens vei på åtte brett med bevegelige hindringer">
+    <figcaption>Sluttagenten på åtte brett den aldri har sett. Hindringene beveger seg, og streken viser veien agenten gikk.</figcaption>
+  </figure>
+</header>
+
+<section>
+  <div class="label">Tre deler</div>
+  <h2>Se, forestill seg, handle</h2>
+  <div class="vmc">
+    <div class="part" style="--c: var(--agent)">
+      <div class="letter">V</div>
+      <h3>Synet</h3>
+      <p>En VAE presser hvert bilde ned til 32 tall, z. Alt agenten vet om verden går gjennom dem.</p>
+    </div>
+    <div class="part" style="--c: var(--dream)">
+      <div class="letter">M</div>
+      <h3>Verdensmodellen</h3>
+      <p>Et MDN-RNN spår neste z og om skrittet ender i mål eller krasj. Kjørt i løkke er det en drøm.</p>
+    </div>
+    <div class="part" style="--c: var(--goal)">
+      <div class="letter">C</div>
+      <h3>Controlleren</h3>
+      <p>En lineær regel med noen få dusin tall. Den trenes med evolusjon, bare inne i drømmen.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="label">Reisen i ett bilde</div>
+  <h2>Andel brett der agenten når målet</h2>
+  <p>Hvert punkt er én agent spilt på de samme 2000 nye brettene. Det lange stykket rundt 10 % er ikke en feil i
+    figuren: i fem steg lærte agenten mest å lure drømmen.</p>
+  <div class="chart" id="chart" role="img" aria-label="Linjediagram over målrate per steg"></div>
+</section>
+
+<section>
+  <div class="label">Steg for steg</div>
+  <h2>Hva vi prøvde, og hva som skjedde</h2>
+  <div class="steps">
+
+    <div class="era"><div class="label">Bygge delene</div></div>
+
+    <div class="step world" style="--c: var(--muted)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 1</span><h3>Et eget lite spill</h3></div>
+        <p>GridDodge: et 8×8-rutenett med agent, mål og seks hindringer. +1 for målet, −1 for krasj, maks 50 skritt.
+          Lite nok til å trene på en vanlig CPU.</p>
+        <span class="result">tilfeldig spill: 11 % mål, 82 % krasj</span>
+      </div>
+      <figure><img class="pix" src="preview.png" alt="Fem tilfeldige episoder"></figure>
+    </div>
+
+    <div class="step" style="--c: var(--agent)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 2</span><h3>V: fra bilde til 32 tall</h3></div>
+        <p>Uten vekting tegnet VAE-en aldri agenten, fordi én liten blå rute knapt teller i pikselfeilen.
+          Vekting av objektene løste det.</p>
+        <span class="result">99,2 % riktige celler, agenten riktig i 90 %</span>
+      </div>
+      <figure><img class="pix" src="experiments/vae_20k_recon.png" alt="Originaler og rekonstruksjoner"><figcaption>Øverst originalen, under tre varianter av VAE-en.</figcaption></figure>
+    </div>
+
+    <div class="step" style="--c: var(--dream)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 3</span><h3>M: drømmen</h3></div>
+        <p>MDN-RNN-en lærer hva som skjer etter hver handling. Drømmen holder noen skritt, så sklir den: agenter
+          forsvinner og mål dukker opp.</p>
+        <span class="result">agenten riktig etter ett skritt: 58 % (stå stille-gjetning: 28 %)</span>
+      </div>
+      <figure><img class="pix" src="experiments/mdnrnn_dream.png" alt="Drøm mot virkelighet"><figcaption>Annenhver rad er virkeligheten og drømmen.</figcaption></figure>
+    </div>
+
+    <div class="era"><div class="label">Drømmen blir lurt</div></div>
+
+    <div class="step" style="--c: var(--wall)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 4–4c</span><h3>C lærer å utnytte drømmen</h3></div>
+        <p>Den første controlleren lærte å gå til veggen og vente. Drømmen trodde den nådde målet i 36 % av tilfellene,
+          virkeligheten sa 7 %. Mer data, en drøm som vet hvor målet er, og en læreplan hjalp lite.</p>
+        <span class="result">6–10 % mål</span>
+        <p class="lesson">Lærdom: en controller finner feilene i drømmen før den finner målet.</p>
+      </div>
+    </div>
+
+    <div class="step" style="--c: var(--goal)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 4d–4e</span><h3>Bedre søk og fremsyn</h3></div>
+        <p>CMA-ES og en belønning for å komme nærmere målet ifølge M sin egen tro ga søket en bakke å gå opp.
+          Så fikk C se ett skritt frem i drømmen for hver handling. Krasjene falt, men agenten begynte å pendle.</p>
+        <span class="result">43 % mål · krasj 54 % → 32 %</span>
+      </div>
+    </div>
+
+    <div class="step" style="--c: var(--muted)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 5</span><h3>Måle alt likt</h3></div>
+        <p>Alle agenter og fem grunnlinjer på de samme 2000 nye brettene, med intervaller. Juks-grunnlinjen viste at en
+          enkel regel med sanne posisjoner når 99 %, så flaskehalsen var hva M visste, ikke hva C gjorde.</p>
+        <span class="result">M visste hvor målet var i bare 26 % av skrittene</span>
+      </div>
+      <figure><img src="evaluation/outcomes.svg" alt="Utfall per policy"></figure>
+    </div>
+
+    <div class="era"><div class="label">Drømmen lærer å se</div></div>
+
+    <div class="step" style="--c: var(--agent)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 6</span><h3>Et øye</h3></div>
+        <p>En liten modell leser agentens og målets celle rett fra z. Den ser riktig i over 90 %, men drømmen spådde
+          fortsatt hendelser fra minnet, så den straffet nettopp strategien som virket.</p>
+        <span class="result">28 % mål for den lærte, 61 % for en håndlaget regel</span>
+      </div>
+    </div>
+
+    <div class="step" style="--c: var(--goal)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 7</span><h3>Drømmen ser</h3></div>
+        <p>Nærsyn: for hver retning spår øyet om målet eller en hindring står i nabocellen. Drømmen ble ærlig, og
+          controlleren lært i den ble best så langt.</p>
+        <span class="result">75 % mål · 11 % krasj</span>
+      </div>
+    </div>
+
+    <div class="step" style="--c: var(--goal)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 8</span><h3>Slutt på pendlingen</h3></div>
+        <p>Vår egen løsning: M sporer hvor agenten står med et lite Bayes-filter, og teller hvor den har vært.
+          Controlleren lærer selv i drømmen at det ikke lønner seg å gå tilbake.</p>
+        <span class="result">93 % mål · 7 % krasj · 0 av 2000 pendler</span>
+      </div>
+      <figure><img class="pix" src="evaluation/compare_paths.png" alt="Steg 7 og steg 8 på de samme brettene"><figcaption>Samme brett: steg 7 øverst står fast, steg 8 nederst kommer frem.</figcaption></figure>
+    </div>
+
+    <div class="step" style="--c: var(--dream)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 9</span><h3>Vis drømmen</h3></div>
+        <p>En side der man spiller av episoder og ser hva agenten ser, tror og drømmer i hvert skritt,
+          ved siden av hva som faktisk skjer.</p>
+        <a href="drom/index.html">Åpne drømmesiden</a>
+      </div>
+    </div>
+
+    <div class="era"><div class="label">Verden begynner å bevege seg</div></div>
+
+    <div class="step world" style="--c: var(--wall)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 10</span><h3>Bevegelige hindringer</h3></div>
+        <p>Tre av seks hindringer går frem og tilbake. Ett bilde viser ikke hvor de er på vei, så agenten må huske.
+          Nærsynet fikk minnet til M.</p>
+        <span class="result">83 % mål (steg 8 uendret: 78 %)</span>
+      </div>
+      <figure><img class="pix" src="evaluation_moving/final_strips.png" alt="Tre episoder med bevegelige hindringer"><figcaption>Mål, en hindring som flytter seg inn i agenten, og et stengt hjørne.</figcaption></figure>
+    </div>
+
+    <div class="step" style="--c: var(--goal)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 11</span><h3>Øyet leser hindringene</h3></div>
+        <p>Et nytt øye leser et kart over hindringene, og et lite nett regner ut bevegelsen fra to bilder.
+          Ett minutts trening, og controlleren fra steg 10 ble bedre uten å trenes på nytt.</p>
+        <span class="result">90 % mål · 10 % krasj</span>
+        <p class="lesson">Lærdom: en bedre verdensmodell gjorde agenten bedre med en gang.</p>
+      </div>
+    </div>
+
+    <div class="step" style="--c: var(--dream)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 12–13</span><h3>Drømmesiden og denne siden</h3></div>
+        <p>Drømmesiden viser nå hindringskartet og hvor M tror hindringene går. Den spådde 79 % av cellene en hindring
+          flyttet seg inn i, med 95 % presisjon. Steg 13 er denne oversikten.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="closing">
+  <div style="display:grid; gap:12px; align-content:start">
+    <div class="label">Det som gjenstår</div>
+    <h2>Svakhetene vi vet om</h2>
+    <ul>
+      <li>Krasj i første skritt, før noen kan se hvor hindringene går.</li>
+      <li>Drømmen overdriver krasjfaren: den lover 9 %, og 4 % skjer.</li>
+      <li>Agenten ser hele brettet. En verden der den bare ser litt rundt seg, ville gjort minnet viktigere.</li>
+    </ul>
+  </div>
+  <div style="display:grid; gap:12px; align-content:start">
+    <div class="label">Slik ble det laget</div>
+    <h2>Vibekoding, ett steg om gangen</h2>
+    <p>Hvert steg ble bygget med Claude Code, testet og godkjent før neste. Alle valg og blindveier står med begrunnelse
+      i <a href="https://github.com/trowangotang/world-models/blob/main/decisions.md">decisions.md</a>, og
+      kommandoene og tallene for hvert steg i <a href="https://github.com/trowangotang/world-models/blob/main/docs/steg.md">docs/steg.md</a>.</p>
+  </div>
+</section>
+
+<footer>
+  <span>Python · PyTorch · NumPy · alt kjører på CPU</span>
+  <span>Evaluert på 2000 brett med seed 200 000–201 999</span>
+  <span>Etter <a href="https://worldmodels.github.io/">Ha &amp; Schmidhuber, World Models (2018)</a></span>
+</footer>
+</main>
+
+<script>
+(function () {
+  // Andel mål på de 2000 evalueringsbrettene (docs/evaluation*/results.json)
+  var stille = [["4", 7.2], ["4b", 5.7], ["4c", 9.9], ["4d", 42.7], ["4e", 40.8], ["6", 28.2], ["7", 75.4], ["8", 92.6]];
+  var bevegelig = [["8", 78.4], ["10", 83.1], ["11", 89.8]];
+  var labels = ["4", "4b", "4c", "4d", "4e", "6", "7", "8", "10", "11"];
+  var W = 760, H = 330, L = 44, R = 150, T = 18, B = 40;
+  var x = function (k) { return L + labels.indexOf(k) * (W - L - R) / (labels.length - 1); };
+  var y = function (v) { return T + (100 - v) * (H - T - B) / 100; };
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">';
+  [0, 25, 50, 75, 100].forEach(function (v) {
+    s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)" fill="none"/>';
+    s += '<text x="' + (L - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '%</text>';
+  });
+  labels.forEach(function (k) { s += '<text x="' + x(k) + '" y="' + (H - B + 22) + '" text-anchor="middle">' + k + '</text>'; });
+  s += '<text x="' + L + '" y="' + (H - 2) + '">steg</text>';
+  function ref(v, name) {
+    s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--muted)" stroke-dasharray="4 4" fill="none"/>';
+    s += '<text x="' + (W - R + 8) + '" y="' + (y(v) + 4) + '">' + name + '</text>';
+  }
+  ref(98.5, "juks: ~99 %");
+  ref(12.9, "tilfeldig: 13 %");
+  function line(pts, color, name, dy) {
+    s += '<polyline fill="none" stroke="' + color + '" stroke-width="2.5" points="' + pts.map(function (p) { return x(p[0]) + ',' + y(p[1]); }).join(' ') + '"/>';
+    pts.forEach(function (p, i) {
+      s += '<rect x="' + (x(p[0]) - 5) + '" y="' + (y(p[1]) - 5) + '" width="10" height="10" rx="2" fill="' + color + '"/>';
+      var up = name === "stille" ? (p[0] === "4b" || p[0] === "6" ? 18 : -10) : 18;
+      s += '<text class="val" x="' + x(p[0]) + '" y="' + (y(p[1]) + up) + '" text-anchor="middle">' + String(p[1]).replace('.', ',') + '</text>';
+    });
+    var last = pts[pts.length - 1];
+    s += '<text x="' + (x(last[0]) + 12) + '" y="' + (y(last[1]) + dy) + '" fill="' + color + '" style="fill:' + color + '">' + name + '</text>';
+  }
+  line(stille, "var(--goal)", "stille", 4);
+  line(bevegelig, "var(--wall)", "bevegelige", 4);
+  s += '</svg>';
+  document.getElementById("chart").innerHTML = s;
+})();
+</script>
+</body>
+</html>
