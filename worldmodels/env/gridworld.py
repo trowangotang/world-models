@@ -17,6 +17,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from worldmodels.env.raycast import GOAL_CELL, OBSTACLE_CELL, render_first_person
+
 # Handlinger: indeks -> (drow, dcol)
 ACTIONS: tuple[tuple[int, int], ...] = (
     (-1, 0),  # 0: opp
@@ -26,6 +28,12 @@ ACTIONS: tuple[tuple[int, int], ...] = (
 )
 ACTION_NAMES: tuple[str, ...] = ("opp", "ned", "venstre", "høyre")
 NUM_ACTIONS = len(ACTIONS)
+
+# Førsteperson (steg 14): handlingene er relative til retningen agenten ser, som i Doom.
+# Å snu tar et skritt, men agenten blir stående. Retningen er en indeks i ACTIONS.
+FORWARD, TURN_LEFT, TURN_RIGHT, BACK = 0, 1, 2, 3
+FP_ACTION_NAMES: tuple[str, ...] = ("fram", "snu venstre", "snu høyre", "rygg")
+CLOCKWISE: tuple[int, ...] = (0, 3, 1, 2)  # opp, høyre, ned, venstre
 
 # Farger (RGB) valgt så de er lette å skille, også etter VAE-komprimering.
 COLOR_BACKGROUND = (20, 20, 30)
@@ -46,6 +54,8 @@ class GridConfig:
     reward_goal: float = 1.0
     reward_obstacle: float = -1.0
     reward_step: float = -0.01
+    # Steg 14: agenten ser verden i førsteperson og styrer med fram/snu/rygg (decisions.md D75).
+    first_person: bool = False
 
     @property
     def image_size(self) -> int:
@@ -62,6 +72,9 @@ class GridDodgeEnv:
       * Etter max_steps skritt avkortes episoden (truncated=True).
       * Med moving_obstacles > 0 flytter de bevegelige hindringene seg etter agenten i hvert skritt.
         Flytter en hindring seg inn i agenten, avsluttes episoden som om agenten gikk inn i den.
+      * Med first_person ser agenten verden fra innsiden og har handlingene fram, snu venstre,
+        snu høyre og rygg. Å snu bruker et skritt uten å flytte agenten. Brettene og reglene er ellers
+        de samme, så resultatene kan sammenlignes med verdenen ovenfra.
     """
 
     def __init__(self, config: GridConfig | None = None, seed: int | None = None):
@@ -77,6 +90,7 @@ class GridDodgeEnv:
         self.obstacles: frozenset[tuple[int, int]] = frozenset()
         # De bevegelige hindringene: posisjon og retning, i fast rekkefølge
         self.movers: list[tuple[tuple[int, int], tuple[int, int]]] = []
+        self.heading = 0  # retningen agenten ser i førsteperson, indeks i ACTIONS
         self.steps = 0
         self._done = True
 
@@ -99,6 +113,9 @@ class GridDodgeEnv:
             self._sample_layout()
             if self._goal_reachable():
                 break
+        if self.config.first_person:
+            # Trekkes etter brettet, så brettene er de samme som ovenfra med samme seed
+            self.heading = int(self._rng.integers(len(ACTIONS)))
         self.steps = 0
         self._done = False
         return self.render()
@@ -110,7 +127,7 @@ class GridDodgeEnv:
             raise ValueError(f"Ugyldig handling {action}, må være 0..{NUM_ACTIONS - 1}")
 
         c = self.config
-        dr, dc = ACTIONS[int(action)]
+        dr, dc = self._move(int(action))
         r, col = self.agent_pos
         nr = min(max(r + dr, 0), c.grid_size - 1)
         ncol = min(max(col + dc, 0), c.grid_size - 1)
@@ -138,11 +155,28 @@ class GridDodgeEnv:
         self._done = terminated or truncated
 
         info = {"event": event, "steps": self.steps, "agent_pos": self.agent_pos}
+        if c.first_person:
+            info["heading"] = self.heading
         return self.render(), float(reward), terminated, truncated, info
 
     # ------------------------------------------------------------ rendering
     def render(self) -> np.ndarray:
-        """Tegn verden som et uint8 RGB-bilde med form observation_shape."""
+        """Det agenten ser: ovenfra, eller i førsteperson med first_person."""
+        if self.config.first_person:
+            return self.render_first_person()
+        return self.render_topdown()
+
+    def render_first_person(self) -> np.ndarray:
+        g = self.config.grid_size
+        cells = np.zeros((g, g), dtype=np.int64)
+        for pos in self.obstacles:
+            cells[pos] = OBSTACLE_CELL
+        cells[self.goal_pos] = GOAL_CELL
+        return render_first_person(cells, self.agent_pos, ACTIONS[self.heading], self.config.image_size,
+                                   COLOR_OBSTACLE, COLOR_GOAL)
+
+    def render_topdown(self) -> np.ndarray:
+        """Tegn verden ovenfra som et uint8 RGB-bilde med form observation_shape."""
         c = self.config
         img = np.empty(self.observation_shape, dtype=np.uint8)
         img[:] = COLOR_BACKGROUND
@@ -181,7 +215,26 @@ class GridDodgeEnv:
             rows.append("".join(row))
         return "\n".join(rows)
 
+    def egocentric(self, pos: tuple[int, int]) -> tuple[int, int]:
+        """Hvor pos er sett fra agenten: (celler fram, celler til høyre) i retningen den ser."""
+        dr, dc = ACTIONS[self.heading]
+        vr, vc = pos[0] - self.agent_pos[0], pos[1] - self.agent_pos[1]
+        return vr * dr + vc * dc, vc * (-dr) + vr * dc
+
     # -------------------------------------------------------------- interne
+    def _move(self, action: int) -> tuple[int, int]:
+        """Hvor handlingen flytter agenten. I førsteperson snur den også agenten."""
+        if not self.config.first_person:
+            return ACTIONS[action]
+        dr, dc = ACTIONS[self.heading]
+        if action == FORWARD:
+            return dr, dc
+        if action == BACK:
+            return -dr, -dc
+        i = CLOCKWISE.index(self.heading)
+        self.heading = CLOCKWISE[(i + (1 if action == TURN_RIGHT else -1)) % 4]
+        return 0, 0
+
     def _fill_cell(self, img: np.ndarray, pos: tuple[int, int], color, margin: int = 0) -> None:
         px = self.config.cell_px
         r, c = pos

@@ -303,6 +303,20 @@ footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line);
       </div>
     </div>
 
+    <div class="era"><div class="label">Verden sett innenfra</div></div>
+
+    <div class="step world" style="--c: var(--goal)">
+      <div class="text">
+        <div class="head"><span class="tag">Steg 14</span><h3>Førsteperson</h3></div>
+        <p>Samme brett, men agenten ser verden innenfra som i et gammelt Doom-spill, og styrer med fram og snu.
+          M fikk et kompass som husker hvor målet er når det forsvinner ut av bildet. Controlleren mistet
+          rygg-knappen: den må se dit den går.</p>
+        <span class="result">75 % mål · 0 % krasj</span>
+        <p class="lesson">Lærdom: sett innenfra er "mål til høyre, snu til høyre" en lineær regel.</p>
+      </div>
+      <figure><img class="pix" src="evaluation_fp/strips.png" alt="Seks episoder ovenfra og i førsteperson"><figcaption>Ovenfra (over) og det agenten ser (under). Nest nederst spinner den fast mellom hindringene.</figcaption></figure>
+    </div>
+
   </div>
 </section>
 
@@ -313,7 +327,7 @@ footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line);
     <ul>
       <li>Krasj i første skritt, før noen kan se hvor hindringene går.</li>
       <li>Drømmen overdriver krasjfaren: den lover 9 %, og 4 % skjer.</li>
-      <li>Agenten ser hele brettet. En verden der den bare ser litt rundt seg, ville gjort minnet viktigere.</li>
+      <li>I førsteperson går agenten seg fast i en av fire episoder, oftest ved å snu fram og tilbake.</li>
     </ul>
   </div>
   <div style="display:grid; gap:12px; align-content:start">

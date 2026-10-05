@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from worldmodels.controller.features import world_features
+from worldmodels.controller.features import Habits, world_features
 from worldmodels.controller.policy import LinearController
 from worldmodels.data import Episode, save_episode
 from worldmodels.env import GridConfig, GridDodgeEnv
@@ -25,11 +25,13 @@ class WorldModelAgent:
         self.vae, self.rnn, self.controller = vae.eval(), rnn.eval(), controller
         self.hidden = None
         self.memory = None   # øyets hukommelse (mdnrnn/tracker.py)
+        self.habits = None   # de siste skrittene i førsteperson (features.py)
 
     def reset(self, batch_size: int) -> None:
         H = self.rnn.config.hidden_dim
         self.hidden = (torch.zeros(1, batch_size, H), torch.zeros(1, batch_size, H))
         self.memory = None
+        self.habits = Habits.fresh(batch_size) if self.controller.habits else None
 
     @torch.no_grad()
     def act(self, obs: np.ndarray, epsilon: float = 0.0, rng: np.random.Generator | None = None) -> np.ndarray:
@@ -43,7 +45,9 @@ class WorldModelAgent:
         extra = None
         if c.extra_dim:
             extra, self.memory = world_features(self.rnn, z, self.hidden, c.beliefs, c.lookahead, c.sight,
-                                                self.memory, track=c.track)
+                                                self.memory, track=c.track, compass=c.compass)
+            if c.habits:
+                extra = torch.cat([extra, self.habits.features(z)], dim=-1) if extra is not None else self.habits.features(z)
         a = self.controller.act(z, h, extra)
         if epsilon > 0:
             rng = rng if rng is not None else np.random.default_rng()
@@ -53,6 +57,8 @@ class WorldModelAgent:
         self.hidden = self.rnn(z.unsqueeze(1), a.unsqueeze(1), self.hidden).hidden
         if self.memory is not None:
             self.memory = self.memory.moved(a)
+        if self.habits is not None:
+            self.habits = self.habits.after(z, a)
         return a.numpy()
 
 
@@ -73,6 +79,10 @@ def play_episodes(
     envs = [GridDodgeEnv(config) for _ in range(num_episodes)]
     obs = np.stack([env.reset(seed=seed + i) for i, env in enumerate(envs)])
     frames = [[o] for o in obs] if record else None
+    # I førsteperson lagres fasiten ovenfra og retningen også, så episodene kan kodes med etiketter (steg 14)
+    fp = record and envs[0].config.first_person
+    tops = [[env.render_topdown()] for env in envs] if fp else None
+    headings = [[env.heading] for env in envs] if fp else None
     steps = [[] for _ in range(num_episodes)]  # (handling, belønning, terminated, truncated)
     agent.reset(num_episodes)
     active = np.ones(num_episodes, bool)
@@ -85,6 +95,9 @@ def play_episodes(
             steps[i].append((int(actions[i]), r, terminated, truncated))
             if record:
                 frames[i].append(o.copy())
+            if fp:
+                tops[i].append(envs[i].render_topdown())
+                headings[i].append(envs[i].heading)
             if terminated or truncated:
                 active[i] = False
                 if terminated:
@@ -101,7 +114,7 @@ def play_episodes(
     }
     episodes = []
     if record:
-        for f, ep in zip(frames, steps):
+        for i, (f, ep) in enumerate(zip(frames, steps)):
             a, r, te, tr = zip(*ep)
             episodes.append(Episode(
                 obs=np.stack(f).astype(np.uint8),
@@ -109,6 +122,8 @@ def play_episodes(
                 rewards=np.asarray(r, dtype=np.float32),
                 terminated=np.asarray(te, dtype=bool),
                 truncated=np.asarray(tr, dtype=bool),
+                topdown=np.stack(tops[i]).astype(np.uint8) if fp else None,
+                heading=np.asarray(headings[i], dtype=np.int64) if fp else None,
             ))
     return stats, episodes
 

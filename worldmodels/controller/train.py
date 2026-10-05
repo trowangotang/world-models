@@ -54,10 +54,14 @@ def train(
     zh_std: float = 1.0,
     seed: int = 0,
     moving: int = 0,
+    compass: bool = False,
+    first_person: bool = False,
+    no_back: bool = False,
+    habits: bool = False,
     log=lambda msg: print(msg, flush=True),
 ) -> dict:
     torch.manual_seed(seed)
-    real_config = GridConfig(moving_obstacles=moving)
+    real_config = GridConfig(moving_obstacles=moving, first_person=first_person)
     rng = np.random.default_rng(seed)
     gen = torch.Generator().manual_seed(seed)
     vae, _ = ConvVAE.load(vae_path)
@@ -75,9 +79,15 @@ def train(
         raise ValueError("sight krever en MDN-RNN med øye (python -m worldmodels.mdnrnn.eye)")
     if track and not sight:
         raise ValueError("track krever sight (--use-eye)")
-    extra_dim = num_world_features(rnn, use_positions, lookahead, sight, track)
-    controller = LinearController(seqs.mu.shape[1], rnn.config.hidden_dim, rnn.config.num_actions, extra_dim,
-                                  beliefs=use_positions, lookahead=lookahead, sight=sight, track=track)
+    if compass and rnn.compass_net is None:
+        raise ValueError("compass krever en MDN-RNN med kompass (--compass-weight)")
+    extra_dim = num_world_features(rnn, use_positions, lookahead, sight, track, compass, habits)
+    # Uten rygging (førsteperson) kan controlleren bare velge fram og snu: den må se dit den går (D79).
+    # Rygg er siste handling, så de andre beholder nummeret sitt, og M kjenner fortsatt alle fire.
+    num_actions = rnn.config.num_actions - (1 if no_back else 0)
+    controller = LinearController(seqs.mu.shape[1], rnn.config.hidden_dim, num_actions, extra_dim,
+                                  beliefs=use_positions, lookahead=lookahead, sight=sight, track=track, compass=compass,
+                                  habits=habits)
     init = LinearController.load(init_from).params if init_from else None
     if init is not None:
         log(f"Fortsetter fra {init_from}")
@@ -93,7 +103,7 @@ def train(
         raise ValueError(f"ukjent optimizer: {optimizer}")
     remaining = max(0, GridConfig.max_steps - max(contexts) - horizon) if charge_remaining else 0
     dream_cfg = DreamConfig(horizon=horizon, temperature=temperature, remaining_steps=remaining, shaping=shaping)
-    if shaping and not (rnn.num_position_features or sight):
+    if shaping and not (rnn.num_position_features or sight or compass):
         raise ValueError("shaping krever en MDN-RNN med posisjonshode")
     # Fast sett med starter for å måle fremgang i drømmen på samme måte hver gang
     eval_starts = starts.sample(512, np.random.default_rng(seed + 1))
@@ -131,6 +141,7 @@ def train(
         "vae": str(vae_path), "rnn": str(rnn_path), "init_from": str(init_from) if init_from else None,
         "use_positions": use_positions, "remaining_steps": remaining, "shaping": shaping, "optimizer": optimizer,
         "zh_std": zh_std, "lookahead": lookahead, "sight": sight, "track": track, "moving": moving,
+        "compass": compass, "first_person": first_person, "no_back": no_back, "habits": habits,
     }
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     controller.save(out, hparams=json.dumps(hparams))
@@ -173,6 +184,11 @@ def main(argv: list[str] | None = None) -> None:
                    help="CMA-ES: startspredning for vektene på z og h, relativt til resten")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--moving", type=int, default=0, help="de ekte kontrollene kjøres med så mange bevegelige hindringer")
+    p.add_argument("--compass", action="store_true", help="gi controlleren M sitt kompass mot målet (førsteperson)")
+    p.add_argument("--first-person", action="store_true", help="de ekte kontrollene kjøres i førsteperson")
+    p.add_argument("--no-back", action="store_true", help="controlleren kan ikke rygge (førsteperson)")
+    p.add_argument("--habits", action="store_true",
+                   help="gi controlleren snu på rad og om den gikk fast (førsteperson)")
     a = p.parse_args(argv)
     result = train(
         a.vae, a.rnn, a.data, a.out, generations=a.generations, population=a.population,
@@ -180,6 +196,7 @@ def main(argv: list[str] | None = None) -> None:
         temperature=a.temperature, real_check_every=a.real_check_every, init_from=a.init_from,
         use_positions=a.use_positions, lookahead=a.lookahead, sight=a.use_eye, track=a.track, charge_remaining=a.charge_remaining,
         shaping=a.shaping, optimizer=a.optimizer, zh_std=a.zh_std, seed=a.seed, moving=a.moving,
+        compass=a.compass, first_person=a.first_person, no_back=a.no_back, habits=a.habits,
     )
     if a.history:
         Path(a.history).write_text(json.dumps(result, indent=2))

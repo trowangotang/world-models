@@ -17,6 +17,9 @@ Filen inneholder episodene etter hverandre ("flatet ut"):
                                       verden er det det samme som near_obstacle.
     obstacles      (sum(T_i + 1), 64) hindringskartet i bildet (1 = hindring), for hindringsøyet (steg 11).
                                       Agenten dekker cellen den står i. -1 i eldre filer.
+    heading        (sum(T_i + 1),)    retningen agenten ser i førsteperson (indeks i ACTIONS), -1 ovenfra
+    goal_ego       (sum(T_i + 1), 2)  målet sett fra agenten: (celler fram, celler til høyre), førsteperson
+    goal_visible   (sum(T_i + 1),)    1 hvis målet synes i bildet, 0 hvis ikke, -1 ovenfra (steg 14)
     actions        (sum(T_i),)
     events         (sum(T_i),)        EVENT_MOVE / EVENT_GOAL / EVENT_OBSTACLE
     lengths        (N,)               T_i, antall skritt i episode i
@@ -52,7 +55,8 @@ def episode_events(ep: Episode) -> np.ndarray:
     return events
 
 
-PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "near_obstacle", "danger", "obstacles", "actions", "events")
+PER_STEP_FIELDS = ("mu", "logvar", "agent_cell", "goal_cell", "near_obstacle", "danger", "obstacles", "heading",
+                   "goal_ego", "goal_visible", "actions", "events")
 
 
 @dataclass
@@ -67,6 +71,9 @@ class ZSequences:
     near_obstacle: np.ndarray
     danger: np.ndarray
     obstacles: np.ndarray
+    heading: np.ndarray
+    goal_ego: np.ndarray
+    goal_visible: np.ndarray
 
     def __len__(self) -> int:
         return len(self.lengths)
@@ -91,6 +98,9 @@ class ZSequences:
             "near_obstacle": self.near_obstacle[o:o + T + 1],
             "danger": self.danger[o:o + T + 1],
             "obstacles": self.obstacles[o:o + T + 1],
+            "heading": self.heading[o:o + T + 1],
+            "goal_ego": self.goal_ego[o:o + T + 1],
+            "goal_visible": self.goal_visible[o:o + T + 1],
             "actions": self.actions[s:s + T],
             "events": self.events[s:s + T],
         }
@@ -116,6 +126,11 @@ class ZSequences:
         fields.setdefault("danger", fields["near_obstacle"].copy())
         # Filer fra før steg 11 har ikke hindringskartene
         fields.setdefault("obstacles", np.full((len(fields["agent_cell"]), 64), -1, dtype=np.int8))
+        # Filer fra verdenen ovenfra (før steg 14) har ingen retning
+        n = len(fields["agent_cell"])
+        fields.setdefault("heading", np.full(n, -1, dtype=np.int64))
+        fields.setdefault("goal_ego", np.zeros((n, 2), dtype=np.float32))
+        fields.setdefault("goal_visible", np.full(n, -1, dtype=np.int8))
         return cls(**fields)
 
     @classmethod
@@ -148,6 +163,23 @@ def near_obstacles(obstacle_map: np.ndarray, agent_cells: np.ndarray) -> np.ndar
     return out
 
 
+def goal_in_view(obs: np.ndarray) -> np.ndarray:
+    """(N, H, W, 3) førstepersonsbilder -> (N,) int8: synes målet (en grønn piksel)?"""
+    x = obs.astype(np.int16)
+    green = (x[..., 1] > x[..., 0] + 30) & (x[..., 1] > x[..., 2] + 30)
+    return green.reshape(len(obs), -1).any(-1).astype(np.int8)
+
+
+def egocentric(agent_cells: np.ndarray, goal_cell: int, heading: np.ndarray, side: int = 8) -> np.ndarray:
+    """Målet sett fra agenten for hvert bilde: (N, 2) = (celler fram, celler til høyre).
+
+    Samme regning som GridDodgeEnv.egocentric, for en hel episode."""
+    dr, dc = np.asarray(ACTIONS)[heading].T
+    vr = goal_cell // side - agent_cells // side
+    vc = goal_cell % side - agent_cells % side
+    return np.stack([vr * dr + vc * dc, -vc * dr + vr * dc], -1).astype(np.float32)
+
+
 @torch.no_grad()
 def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> ZSequences:
     vae.eval()
@@ -162,7 +194,9 @@ def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> Z
             logvars.append(logvar.numpy())
         parts["mu"].append(np.concatenate(mus))
         parts["logvar"].append(np.concatenate(logvars))
-        cells = parse_cells(ep.obs)
+        # I førsteperson leses fasiten fra bildene ovenfra som lagres ved siden av (steg 14)
+        first_person = ep.topdown is not None
+        cells = parse_cells(ep.topdown if first_person else ep.obs)
         parts["agent_cell"].append(find_cell(cells, AGENT))
         # Målet flytter seg aldri, men skjules når agenten står på det. Bruk første bilde.
         parts["goal_cell"].append(np.full(len(ep.obs), find_cell(cells[:1], GOAL)[0], dtype=np.int64))
@@ -183,6 +217,15 @@ def encode_episodes(vae: ConvVAE, paths: list[Path], batch_size: int = 512) -> Z
         parts["near_obstacle"].append(near)
         parts["danger"].append(danger)
         parts["obstacles"].append(maps.reshape(len(maps), -1).astype(np.int8))
+        n = len(ep.obs)
+        if first_person:
+            parts["heading"].append(ep.heading)
+            parts["goal_ego"].append(egocentric(agent, parts["goal_cell"][-1][0], ep.heading))
+            parts["goal_visible"].append(goal_in_view(ep.obs))
+        else:
+            parts["heading"].append(np.full(n, -1, dtype=np.int64))
+            parts["goal_ego"].append(np.zeros((n, 2), dtype=np.float32))
+            parts["goal_visible"].append(np.full(n, -1, dtype=np.int8))
         parts["actions"].append(ep.actions)
         parts["events"].append(episode_events(ep))
         lengths.append(len(ep))

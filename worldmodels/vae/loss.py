@@ -15,13 +15,18 @@ from worldmodels.env.gridworld import COLOR_BACKGROUND
 _BACKGROUND = torch.tensor(COLOR_BACKGROUND, dtype=torch.float32) / 255.0
 
 
-def object_weight_map(x: torch.Tensor, object_weight: float) -> torch.Tensor:
+def object_weight_map(x: torch.Tensor, object_weight: float, colourful: bool = False) -> torch.Tensor:
     """Vekt per piksel, (N, 1, H, W): object_weight der x ikke er bakgrunn, ellers 1.
 
-    x: (N, 3, H, W) i [0, 1].
+    x: (N, 3, H, W) i [0, 1]. Med colourful teller bare fargerike piksler som objekter. I førsteperson
+    (steg 14) er tak, gulv og vegger gråtoner og fyller det meste av bildet, mens hindringene og målet
+    er de eneste klare fargene (D76).
     """
-    bg = _BACKGROUND.to(x.device).view(1, 3, 1, 1)
-    is_object = ((x - bg).abs().amax(dim=1, keepdim=True) > 0.05).float()
+    if colourful:
+        is_object = ((x.amax(dim=1, keepdim=True) - x.amin(dim=1, keepdim=True)) > 0.15).float()
+    else:
+        bg = _BACKGROUND.to(x.device).view(1, 3, 1, 1)
+        is_object = ((x - bg).abs().amax(dim=1, keepdim=True) > 0.05).float()
     return 1.0 + (object_weight - 1.0) * is_object
 
 
@@ -37,13 +42,14 @@ def vae_loss(
     logvar: torch.Tensor,
     object_weight: float = 10.0,
     beta: float = 1.0,
+    colourful: bool = False,
 ) -> dict[str, torch.Tensor]:
     """Returnerer {"loss", "recon", "kl"}, alle snittet over batchen.
 
     recon er vektet kvadratfeil summert over piksler og kanaler, slik at den står
     i et fornuftig forhold til KL-leddet (som også er en sum over dimensjoner).
     """
-    w = object_weight_map(x, object_weight)
+    w = object_weight_map(x, object_weight, colourful)
     recon_loss = (w * (recon - x).pow(2)).sum(dim=(1, 2, 3)).mean()
     kl = kl_divergence(mu, logvar).mean()
     return {"loss": recon_loss + beta * kl, "recon": recon_loss, "kl": kl}

@@ -15,6 +15,7 @@ neste, og alle valg og blindveier står i [`decisions.md`](decisions.md).
 |---|---:|---:|---:|---:|
 | Stille hindringer (steg 8) | **93 %** | 7 % | 13 % | 99 % |
 | Tre bevegelige hindringer (steg 11) | **90 %** | 10 % | 10 % | 99 % |
+| Førsteperson, stille hindringer (steg 14) | **75 %** | 0 % | 12 % | 100 % |
 
 Controlleren er en lineær regel med noen få dusin tall, trent bare i drømmen. Veien dit gikk gjennom
 fem steg der agenten mest lærte å lure drømmen (rundt 10 % mål), før drømmen lærte å se.
@@ -57,6 +58,7 @@ GitHub viser HTML-filene som kode. Last dem ned og åpne dem i nettleseren; de h
 | 11. Øyet leser hindringene | `worldmodels/mdnrnn/obstacles.py` | ✅ når målet i 90 % med bevegelige hindringer, uten ny controller-trening |
 | 12. Drømmesiden, bevegelig | `worldmodels/dreamview` | ✅ [siden](docs/drom/index.html) viser hindringskartet og hvor M tror hindringene går |
 | 13. Porteføljeside | `docs/index.html`, `docs/steg.md` | ✅ [oversiktsside](docs/index.html) over hele reisen, kort README |
+| 14. Førsteperson | `worldmodels/env/raycast.py`, kompass i `worldmodels/mdnrnn` | ✅ agenten ser verden innenfra som i Doom: 75 % mål, 0 % krasj |
 
 ## Miljøet: GridDodge
 
